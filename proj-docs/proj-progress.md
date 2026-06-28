@@ -143,9 +143,10 @@ print(f\"{'TOTAL':<12} {sum(x[1] for x in rows):>12,} {sum(x[2] for x in rows):>
 - [x] **`DEPLOY.md`** + root `Dockerfile` + `railway.toml` for Railway
 - [x] **`scripts/run-local.sh`** — docker compose bootstrap
 - [x] **Supabase DB slice** — schema + ingest (11,850 listings, 56,007 reviews) — see [deploy-progress.md](./deploy-progress.md)
-- [x] **Railway API** — https://travel-ai-app-production-bc05.up.railway.app (`db:true`, Session pooler) — see [deploy-progress.md](./deploy-progress.md)
-- [ ] **Vercel frontend** → live URL
-- [ ] **Live deploy smoke test** — filter, NL, concierge, failure case on production URL
+- [x] **Railway API** — https://travel-ai-app-production-bc05.up.railway.app
+- [x] **Vercel frontend** — https://travel-ai-app-five.vercel.app
+- [x] **Production smoke test** — health, listings, NL search, concierge, compare (2026-06-28)
+- [ ] **Loom walkthrough** + submission email
 
 ### Phase 4 — remaining (if time before submit)
 - [ ] UI polish (Booking-style density, guest selector, property type filter)
@@ -660,6 +661,10 @@ python scripts/ingest.py --city barcelona --limit 10 --skip-embeddings
 ---
 
 ## Changelog
+
+### 2026-06-28 (Production deploy complete)
+- Vercel: https://travel-ai-app-five.vercel.app · Railway API live · smoke tests pass
+- DeepSeek chat + OpenAI embeddings in prod; full log in [deploy-progress.md](./deploy-progress.md)
 
 ### 2026-06-28 (ModelFactory — OpenAI-compatible chat APIs)
 - Chat: `LLM_BASE_URL` + `LLM_API_KEY` (DeepSeek, OpenAI, Groq, etc.) via `ChatOpenAI`

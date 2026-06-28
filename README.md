@@ -2,6 +2,8 @@
 
 AI-native travel discovery and booking: search, map, property detail, wishlist, compare, and a LangGraph multi-agent concierge.
 
+**Live demo:** https://travel-ai-app-five.vercel.app · **API:** https://travel-ai-app-production-bc05.up.railway.app
+
 ## One-command local start
 
 ```bash

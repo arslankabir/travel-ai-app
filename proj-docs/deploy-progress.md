@@ -5,18 +5,46 @@ Stack: **Supabase** (Postgres) · **Railway** (FastAPI) · **Vercel** (Next.js)
 
 ---
 
+## Live URLs (submission)
+
+| Service | URL |
+| :--- | :--- |
+| **Frontend (Vercel)** | https://travel-ai-app-five.vercel.app |
+| **API (Railway)** | https://travel-ai-app-production-bc05.up.railway.app |
+| **Database (Supabase)** | Project `unrkkzzmeumoogivclpv` · region Seoul |
+
+**Local full corpus:** Docker Postgres `travel_db` — ~50K listings / ~262K reviews (assignment minimums).  
+**Production slice:** Supabase — 11,850 listings / 56,007 reviews (Lisbon + Barcelona).
+
+---
+
 ## Checklist
 
 | Step | Status | Notes |
 | :--- | :---: | :--- |
 | Supabase project created | ✅ | Project ref: `unrkkzzmeumoogivclpv` · region: Seoul |
 | Extensions (`postgis`, `vector`) | ✅ | |
-| Schema (`init-extensions.sql`) | ✅ | tables: listings, reviews, calendar, listing_review_summaries |
-| Deploy data slice ingested | ✅ | 2026-06-28 — see logs below |
-| Railway API deployed | ✅ | 2026-06-28 — see [Railway fixes](#railway--supabase-connection-fix-log) |
-| Vercel frontend deployed | ⬜ | |
-| Production smoke test | ⬜ | filter, NL search, concierge, failure case |
-| Live URL in README / submission | ⬜ | API: `https://travel-ai-app-production-bc05.up.railway.app` |
+| Schema (`init-extensions.sql`) | ✅ | listings, reviews, calendar, listing_review_summaries |
+| Deploy data slice ingested | ✅ | 2026-06-28 — 11,850 listings, all embedded |
+| Railway API deployed | ✅ | Session pooler + PORT/socat fixes — see fix log |
+| Vercel frontend deployed | ✅ | Root `frontend` · `NEXT_PUBLIC_API_URL` → Railway |
+| Production smoke test | ✅ | 2026-06-28 — curl + UI (see below) |
+| Live URL in README / submission | ✅ | URLs above |
+
+---
+
+## Vercel (frontend)
+
+- **Project:** `travel-ai-app`
+- **Production domain:** https://travel-ai-app-five.vercel.app
+- **Root Directory:** `frontend`
+- **Env:** `NEXT_PUBLIC_API_URL=https://travel-ai-app-production-bc05.up.railway.app` (no trailing slash)
+
+**Railway CORS** (after Vercel deploy):
+
+```
+CORS_ORIGINS=https://travel-ai-app-five.vercel.app,http://localhost:3000
+```
 
 ---
 
@@ -24,94 +52,96 @@ Stack: **Supabase** (Postgres) · **Railway** (FastAPI) · **Vercel** (Next.js)
 
 - **Project:** `giving-quietude` · service: `travel-ai-app`
 - **Public URL:** https://travel-ai-app-production-bc05.up.railway.app
-- **Status (2026-06-28):** ✅ `GET /health` → `{"status":"ok","db":true}`
+- **Status:** ✅ `GET /health` → `{"status":"ok","db":true}`
 
-### Verify
+### Production LLM config (DeepSeek chat + OpenAI embeddings)
+
+| Variable | Purpose |
+| :--- | :--- |
+| `OPENAI_API_KEY` | **Embeddings only** (ingest + live `embed_query`) |
+| `LLM_PROVIDER` | `openai` (= any OpenAI-compatible chat API) |
+| `LLM_BASE_URL` | `https://api.deepseek.com/v1` |
+| `LLM_API_KEY` | DeepSeek chat key |
+| `LLM_MODEL_INTENT` | `deepseek-chat` |
+| `LLM_MODEL_REVIEW` | `deepseek-chat` |
+| `LLM_MODEL_ITINERARY` | `deepseek-reasoner` |
+
+Chat is pluggable via `LLM_BASE_URL` + `LLM_API_KEY` (`ModelFactory`). Embeddings stay OpenAI-only.
+
+---
+
+## Production smoke test (2026-06-28)
 
 ```bash
-curl https://travel-ai-app-production-bc05.up.railway.app/health
-# {"status":"ok","db":true}
+API="https://travel-ai-app-production-bc05.up.railway.app"
 
-curl "https://travel-ai-app-production-bc05.up.railway.app/api/listings?city=lisbon&limit=3"
+# Health + DB
+curl -sS "$API/health"
+# → {"status":"ok","db":true}
+
+# Listings (SQL — no LLM)
+curl -sS "$API/api/listings?city=lisbon&limit=3"
+# → total: 8450, items with names/prices
+
+# NL search (DeepSeek intent)
+curl -sS -N -X POST "$API/api/chat/stream" \
+  -H "Content-Type: application/json" \
+  -d '{"user_input":"quiet 1-bed in Lisbon under 130","mode":"search"}'
+# → filters_parsed: city=lisbon, max_price=130, bedrooms=1, vibe=quiet (~1.7s)
+
+# Concierge (DeepSeek + OpenAI embeddings)
+curl -sS -N -X POST "$API/api/chat/stream" \
+  -H "Content-Type: application/json" \
+  -d '{"user_input":"Find a quiet 1-bedroom in Lisbon under 130 with good reviews","mode":"concierge"}'
+# → listings_loaded: 8 stays, semantic scores ~0.66–0.68 (~4.8s)
+
+# Compare (DeepSeek review)
+curl -sS -X POST "$API/api/batch/compare" \
+  -H "Content-Type: application/json" \
+  -d '{"listing_ids":["33348","45855270"]}'
+# → verdict uses property names (Happy Season, Rossio Garden Hotel)
 ```
+
+**UI:** https://travel-ai-app-five.vercel.app — Lisbon search, map, concierge verified.
 
 ---
 
 ## Railway + Supabase connection fix log
 
-Chronological issues and fixes (save this for future deploys):
-
 | # | Symptom | Cause | Fix |
 |:-:|:---|:---|:---|
 | 1 | Build failed | No root `Dockerfile` | Repo-root `Dockerfile` copies `backend/`; Root Directory **empty** |
-| 2 | Healthcheck failed | Uvicorn on 8000, Railway `PORT`=8080 | `${PORT:-8000}` in Dockerfile + `backend/start.sh` |
+| 2 | Healthcheck failed | Uvicorn on 8000, Railway `PORT`=8080 | `${PORT:-8000}` + `backend/start.sh` |
 | 3 | Public **502**, deploy OK | Edge routes to **8000**, app on **8080** | `socat` forwards 8000→8080 in `start.sh` |
-| 4 | `"db": false` | `DATABASE_URL` pointed at **localhost** | Use Supabase URI on Railway, not local Docker |
-| 5 | `db_error`: IPv6 **Network is unreachable** | Direct `db.*.supabase.co` is IPv6; Railway has no IPv6 | Use **Session pooler** URI (IPv4), not direct host |
-| 6 | `tenant/user postgres.unrkkzzmeumoogivclpv not found` | Wrong pooler host/region or hand-built URI | Copy URI exactly from Supabase → Connect → **Session pooler** |
-| 7 | ✅ **`{"status":"ok","db":true}`** | Session pooler + encoded password | See working `DATABASE_URL` format below |
+| 4 | `"db": false` | `DATABASE_URL` = localhost | Supabase URI on Railway |
+| 5 | IPv6 **Network is unreachable** | Direct `db.*.supabase.co` is IPv6 | **Session pooler** URI (IPv4) |
+| 6 | `tenant/user not found` | Hand-built pooler URI | Copy from Supabase → Connect → Session pooler |
+| 7 | ✅ **`db:true`** | Session pooler + `%25` password encoding | See below |
 
 ### Working `DATABASE_URL` on Railway (Session pooler)
 
-Copy from Supabase → **Connect** → **Session pooler** (port **5432**). Shape:
-
 ```
-postgresql://postgres.unrkkzzmeumoogivclpv:PASSWORD@aws-0-ap-northeast-2.pooler.supabase.com:5432/postgres
+postgresql://postgres.unrkkzzmeumoogivclpv:PASSWORD@aws-1-ap-northeast-2.pooler.supabase.com:5432/postgres
 ```
 
 | Context | User | Host |
 | :--- | :--- | :--- |
 | **Local ingest** (Mac) | `postgres` | `db.unrkkzzmeumoogivclpv.supabase.co` |
-| **Railway API** (prod) | `postgres.unrkkzzmeumoogivclpv` | `aws-0-ap-northeast-2.pooler.supabase.com` |
-
-- URL-encode `%` in password as **`%25`**
-- No quotes around values in Railway Variables
-- Code auto-adds `sslmode=require` for remote hosts (`backend/app/db/connection.py`)
-- `/health` exposes `db_error` when `db: false` (deploy debugging)
-
-### Required Railway variables
-
-| Variable | Value |
-| :--- | :--- |
-| `DATABASE_URL` | Session pooler URI (above) |
-| `OPENAI_API_KEY` | OpenAI key (**embeddings** + optional chat fallback) |
-| `LLM_PROVIDER` | `openai` |
-| `LLM_BASE_URL` | `https://api.openai.com/v1` or `https://api.deepseek.com/v1` |
-| `LLM_API_KEY` | Chat key (DeepSeek etc.; omit to reuse `OPENAI_API_KEY`) |
-| `LLM_MODEL_INTENT` | `gpt-4o-mini` |
-| `LLM_MODEL_REVIEW` | `gpt-4o-mini` |
-| `LLM_MODEL_ITINERARY` | `gpt-4o` |
-| `EMBEDDING_MODEL` | `text-embedding-3-small` |
-| `VECTOR_DIMENSION` | `512` |
-| `CORS_ORIGINS` | `http://localhost:3000` (+ Vercel URL after frontend deploy) |
-
-**Remove** `REDIS_URL=redis://localhost:6379/0` — in-memory cache on Railway.
-
-### Code changes for Railway (in repo)
-
-- Root `Dockerfile` + `backend/start.sh` (PORT + socat 8000→8080)
-- `backend/app/db/connection.py` — SSL + `db_error` on `/health`
-- `backend/app/main.py` — `/health` returns `db` + `db_error`
+| **Railway API** (prod) | `postgres.unrkkzzmeumoogivclpv` | `aws-1-ap-northeast-2.pooler.supabase.com` |
 
 ---
-
-## Railway troubleshooting (archived)
 
 ## Supabase connection
 
 ### Local ingest (direct — IPv6 OK on Mac)
 
-- **Host:** `db.unrkkzzmeumoogivclpv.supabase.co:5432`
-- **User:** `postgres`
-- **URI:** `postgresql://postgres:PASSWORD@db.unrkkzzmeumoogivclpv.supabase.co:5432/postgres`
+```
+postgresql://postgres:PASSWORD@db.unrkkzzmeumoogivclpv.supabase.co:5432/postgres
+```
 
 ### Railway API (Session pooler — IPv4 required)
 
-- **Host:** `aws-0-ap-northeast-2.pooler.supabase.com:5432`
-- **User:** `postgres.unrkkzzmeumoogivclpv`
-- **URI:** copy from Supabase → Connect → **Session pooler**
-- **URL-encode `%` in password** as `%25` when using the URI in shell exports.
-- **Do not commit** passwords or API keys. Store `DATABASE_URL` in Railway env vars only.
+Copy from Supabase → **Connect** → **Session pooler** (port 5432).
 
 ---
 
@@ -119,132 +149,84 @@ postgresql://postgres.unrkkzzmeumoogivclpv:PASSWORD@aws-0-ap-northeast-2.pooler.
 
 ```bash
 cd /Users/arsalankabeer/DevPer/Interviews/travel-ai-app
-
-export SUPABASE_DATABASE_URL='postgresql://postgres:...@db.unrkkzzmeumoogivclpv.supabase.co:5432/postgres'
-
+export SUPABASE_DATABASE_URL='postgresql://postgres:...@db....supabase.co:5432/postgres'
 cd ingestion && source .venv/bin/activate && cd ..
-
-# Smoke test (no embeddings)
 ./scripts/ingest-deploy-slice.sh smoke
-
-# Full deploy slice (requires OPENAI_API_KEY from .env)
 set -a && source .env && set +a
 export SUPABASE_DATABASE_URL='...'
 ./scripts/ingest-deploy-slice.sh
 ```
 
----
+### Final deploy slice stats
 
-## Ingest logs
-
-### Smoke test — Lisbon 200 raw rows
-
-```
-=== Ingesting lisbon ===
-  Listings after validation: 168
-  Skipping embeddings (--skip-embeddings)
-  Inserting 168 listings...
-  Reviews to ingest: 821
-  Calendar rows: 15,288
-
-=== Database stats ===
-  Listings:  168 (0 with embeddings)
-  Reviews:   821
-  Calendar:  15,288
-    lisbon: 168
-```
-
-### Full deploy slice — Lisbon 10k + Barcelona 5k (with embeddings)
-
-**Lisbon**
-
-```
-=== Ingesting lisbon ===
-  Listings after validation: 8,450
-  Embedding listings: 85/85 batches (~49s)
-  Inserting 8,450 listings...
-  Reviews to ingest: 40,205
-  Calendar rows: 768,950
-
-=== Database stats (after lisbon) ===
-  Listings:  8,450 (8,450 with embeddings)
-  Reviews:   40,205
-  Calendar:  768,950
-    lisbon: 8,450
-```
-
-**Barcelona**
-
-```
-=== Ingesting barcelona ===
-  Listings after validation: 3,400
-  Embedding listings: 34/34 batches (~19s)
-  Inserting 3,400 listings...
-  Reviews to ingest: 15,802
-  Calendar rows: 309,400
-
-=== Database stats (final) ===
-  Listings:  11,850 (11,850 with embeddings)
-  Reviews:   56,007
-  Calendar:  1,078,350
-    barcelona: 3,400
-    lisbon: 8,450
-```
-
----
-
-## Verification (Supabase SQL editor)
-
-Run after ingest:
-
-```sql
-SELECT city, COUNT(*) AS listings FROM listings GROUP BY city ORDER BY city;
-SELECT COUNT(*) AS total_listings FROM listings;
-SELECT COUNT(*) AS with_embeddings FROM listings WHERE embedding IS NOT NULL;
-SELECT COUNT(*) AS total_reviews FROM reviews;
-SELECT COUNT(*) AS total_calendar FROM calendar;
-```
-
-**Expected (2026-06-28):**
-
-| Metric | Expected |
+| Metric | Value |
 | :--- | ---: |
 | Lisbon listings | 8,450 |
 | Barcelona listings | 3,400 |
-| Total listings | 11,850 |
+| **Total listings** | **11,850** |
 | With embeddings | 11,850 |
 | Reviews | 56,007 |
 | Calendar rows | 1,078,350 |
 
 ---
 
-## Next steps
+## Data verification
 
-### 1. Railway (API) — ✅ done
+### Local (assignment scale — Docker `travel_db`)
 
-Live: https://travel-ai-app-production-bc05.up.railway.app  
-Use **Session pooler** `DATABASE_URL` on Railway (see fix log above).
+```bash
+PGPASSWORD=postgrespassword psql -h localhost -U postgres -d travel_db -c "
+SELECT city, COUNT(*) AS listings,
+       COUNT(*) FILTER (WHERE embedding IS NOT NULL) AS embedded
+FROM listings GROUP BY city ORDER BY city;
+SELECT COUNT(*) AS total_listings FROM listings;
+SELECT COUNT(*) FROM reviews;
+"
+```
 
-### 2. Vercel (frontend) — **current**
+**Expected locally:** ≥50,000 listings · ≥200,000 reviews · ≥2 cities · embeddings ≈ listing count.
 
-1. Import repo → Root Directory: `frontend`.
-2. `NEXT_PUBLIC_API_URL` = `https://travel-ai-app-production-bc05.up.railway.app` (no trailing slash).
-3. Deploy → add Vercel URL to Railway `CORS_ORIGINS`.
+### Production (Supabase SQL editor)
 
-### 3. Production smoke test
+```sql
+SELECT city, COUNT(*) AS listings,
+       COUNT(*) FILTER (WHERE embedding IS NOT NULL) AS embedded
+FROM listings GROUP BY city ORDER BY city;
+SELECT COUNT(*) FROM listings;
+SELECT COUNT(*) FROM reviews;
+```
 
-See [DEPLOY.md](../DEPLOY.md) §4 and [EVAL.md](../EVAL.md) golden queries.
+**Expected prod:** Lisbon 8,450 · Barcelona 3,400 · 11,850 embedded · 56,007 reviews.
 
 ---
 
-## Troubleshooting notes
+## Code changes for deploy (in repo)
+
+| File | Purpose |
+| :--- | :--- |
+| Root `Dockerfile` + `backend/start.sh` | Monorepo build; PORT + socat 8000→8080 |
+| `backend/app/db/connection.py` | SSL; `db` + `db_error` on `/health` |
+| `backend/app/agents/factory.py` | Pluggable chat (`LLM_BASE_URL` + `LLM_API_KEY`); OpenAI embeddings locked |
+| `scripts/ingest-deploy-slice.sh` | One-command Supabase slice ingest |
+
+---
+
+## Troubleshooting
 
 | Issue | Fix |
 | :--- | :--- |
-| `python: command not found` | `cd ingestion && source .venv/bin/activate` before running script |
-| Connection refused / auth failed | URL-encode `%` in password; use direct port 5432 |
-| Healthcheck failure after deploy | Dockerfile must bind `${PORT:-8000}` (Railway injects `PORT`) |
-| Public 502 but Deploy Logs show `/health` 200 | Set Networking **target port** to Deploy Log port (e.g. **8080**) |
-| Build failed: Dockerfile not found | Use repo root deploy + root `Dockerfile` (copies `backend/`) |
-| Listings 500 / health `db: false` | Wrong/missing `DATABASE_URL`; encode `%` in password; try **Session pooler** URI (IPv4) |
-| Chat timeout on Railway | Warm with `/health` + one chat request; use OpenAI not Ollama |
+| `python: command not found` (ingest) | `cd ingestion && source .venv/bin/activate` |
+| Public 502 | `start.sh` socat; or set Networking port to 8080 |
+| `db: false` | Session pooler URI; encode `%` as `%25`; not localhost |
+| CORS on Vercel | Add `https://travel-ai-app-five.vercel.app` to `CORS_ORIGINS` |
+| Empty UI listings | Check Vercel `NEXT_PUBLIC_API_URL` + redeploy |
+| Concierge no results | `OPENAI_API_KEY` required for query embeddings |
+| DeepSeek not used | `LLM_BASE_URL` + `LLM_API_KEY`; push ModelFactory fix |
+
+---
+
+## Remaining (optional)
+
+- [ ] Record Loom walkthrough (filter, NL, concierge, failure case)
+- [ ] Add live URLs to submission email
+- [ ] Production failure-case demo for eval
