@@ -15,6 +15,7 @@ interface ListingListProps {
   onToggleCompare: (item: ListingCard) => void;
   wishlistIds: Set<string>;
   onToggleWishlist: (item: ListingCard) => void;
+  showPagination?: boolean;
 }
 
 function formatPrice(price: number) {
@@ -37,6 +38,7 @@ export default function ListingList({
   onToggleCompare,
   wishlistIds,
   onToggleWishlist,
+  showPagination = true,
 }: ListingListProps) {
   const page = Math.floor(offset / limit) + 1;
   const totalPages = Math.max(1, Math.ceil(total / limit));
@@ -149,6 +151,7 @@ export default function ListingList({
         )}
       </div>
 
+      {showPagination && (
       <div className="flex items-center justify-between border-t border-zinc-200 px-4 py-3">
         <button
           type="button"
@@ -167,6 +170,7 @@ export default function ListingList({
           Next
         </button>
       </div>
+      )}
     </div>
   );
 }

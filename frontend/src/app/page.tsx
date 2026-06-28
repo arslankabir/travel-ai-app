@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import FilterBar from "@/components/FilterBar";
 import ListingList from "@/components/ListingList";
-import MapView from "@/components/MapView";
+import MapView, { MapViewHandle } from "@/components/MapView";
 import NaturalLanguageBar from "@/components/NaturalLanguageBar";
 import ChatConsole from "@/components/ChatConsole";
 import {
@@ -37,7 +37,9 @@ export default function SearchPage() {
   const [compareIds, setCompareIds] = useState<Set<string>>(new Set());
   const [wishlistIds, setWishlistIds] = useState<Set<string>>(new Set());
   const [conciergeBanner, setConciergeBanner] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<"search" | "concierge">("search");
   const nlAbortRef = useRef<AbortController | null>(null);
+  const mapRef = useRef<MapViewHandle>(null);
 
   useEffect(() => {
     setWishlistIds(new Set(getWishlist().map((x) => x.id)));
@@ -47,6 +49,7 @@ export default function SearchPage() {
     nlAbortRef.current?.abort();
     setUseMapBounds(false);
     setConciergeBanner(null);
+    setViewMode("search");
     setFilters({
       sort: "rating_desc",
       limit: 20,
@@ -82,8 +85,9 @@ export default function SearchPage() {
   }, [filters, mapBbox, useMapBounds]);
 
   useEffect(() => {
+    if (viewMode !== "search") return;
     void load();
-  }, [load]);
+  }, [load, viewMode]);
 
   const handleBboxChange = useCallback((bbox: string | undefined) => {
     setMapBbox(bbox);
@@ -113,23 +117,38 @@ export default function SearchPage() {
     async (hits: Array<{ id: string; city: string }>) => {
       if (!hits.length) return;
       const ids = hits.map((h) => h.id);
+      setLoading(true);
+      setError(null);
       try {
         const data = await fetchListingsByIds(ids);
+        setViewMode("concierge");
+        setUseMapBounds(false);
         setItems(data.items);
         setTotal(data.items.length);
-        setUseMapBounds(false);
         setFilters((prev) => ({
           ...prev,
           city: hits[0]?.city ?? prev.city,
           offset: 0,
         }));
         setConciergeBanner(`Showing ${data.items.length} stays from concierge on map & list`);
-      } catch {
+        window.requestAnimationFrame(() => {
+          mapRef.current?.fitToListings(data.items);
+          window.setTimeout(() => mapRef.current?.fitToListings(data.items), 200);
+        });
+      } catch (err) {
         setConciergeBanner(null);
+        setError(err instanceof Error ? err.message : "Failed to load concierge stays");
+      } finally {
+        setLoading(false);
       }
     },
     [],
   );
+
+  const exitConciergeView = useCallback(() => {
+    setConciergeBanner(null);
+    setViewMode("search");
+  }, []);
 
   const compareHref =
     compareIds.size >= 2 ? `/compare?ids=${Array.from(compareIds).join(",")}` : null;
@@ -168,7 +187,7 @@ export default function SearchPage() {
         useMapBounds={useMapBounds}
         onUseMapBoundsChange={setUseMapBounds}
         onChange={(next) => {
-          setConciergeBanner(null);
+          exitConciergeView();
           setFilters(next);
         }}
         loading={loading}
@@ -179,10 +198,10 @@ export default function SearchPage() {
           {conciergeBanner}
           <button
             type="button"
-            onClick={() => setConciergeBanner(null)}
+            onClick={exitConciergeView}
             className="ml-3 text-xs text-rose-600 underline"
           >
-            Dismiss
+            Back to search
           </button>
         </div>
       )}
@@ -202,7 +221,11 @@ export default function SearchPage() {
             offset={filters.offset ?? 0}
             hoveredId={hoveredId}
             onHover={setHoveredId}
-            onPage={(offset) => setFilters((prev) => ({ ...prev, offset }))}
+            onPage={(offset) => {
+              exitConciergeView();
+              setFilters((prev) => ({ ...prev, offset }));
+            }}
+            showPagination={viewMode === "search"}
             compareIds={compareIds}
             onToggleCompare={handleToggleCompare}
             wishlistIds={wishlistIds}
@@ -211,6 +234,7 @@ export default function SearchPage() {
         </div>
         <div className="min-h-[320px] lg:min-h-0">
           <MapView
+            ref={mapRef}
             items={items}
             hoveredId={hoveredId}
             onHover={setHoveredId}
