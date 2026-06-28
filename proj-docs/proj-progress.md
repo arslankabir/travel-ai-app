@@ -1,10 +1,10 @@
 # Project Progress
 
-Living status doc for the Travel AI assignment. Update whenever major milestones complete or blockers resolve.
+Living status doc for the Travel AI platform. Update whenever major milestones complete or blockers resolve.
 
 **Last updated:** 2026-06-28  
-**Current phase:** Phase 5 — deploy, README, EVAL.md, Loom (Phases 1–3 ✅ · Phase 4 core detail/booking ✅)  
-**Related docs:** [PROJECT_PLAN.md](./PROJECT_PLAN.md) · [HL-component-diagram.md](./HL-component-diagram.md) · [Full Stack AI Developer Assignment.md](./Full%20Stack%20AI%20Developer%20Assignment.md)
+**Current phase:** Phase 5 — deploy, README, EVAL.md (Phases 1–3 ✅ · Phase 4 core detail/booking ✅)  
+**Related docs:** [PROJECT_PLAN.md](./PROJECT_PLAN.md) · [HL-component-diagram.md](./HL-component-diagram.md)
 
 ## How to update this file
 
@@ -12,7 +12,7 @@ Living status doc for the Travel AI assignment. Update whenever major milestones
 
 ---
 
-## Assignment target (minimums)
+## Target minimums
 
 | Requirement | Target | Raw data | Ingested (DB, latest) |
 | :--- | ---: | ---: | ---: |
@@ -61,7 +61,7 @@ print(f\"{'TOTAL':<12} {sum(x[1] for x in rows):>12,} {sum(x[2] for x in rows):>
 | **2** Core Search & Map | 8–18 | ✅ Done | FastAPI listings + Next.js map UI |
 | **3** AI Layer | 18–32 | ✅ Done | LangGraph, hybrid SSE, NL search, concierge, trace, golden-query fixes |
 | **4** Detail, Compare, Polish | 32–40 | ✅ Done | Detail, booking, wishlist, compare, concierge→map sync |
-| **5** Deploy, Eval, Loom | 40–48 | 🟡 In progress | README, EVAL.md, DEPLOY.md ✅; live URL + Loom ⬜ |
+| **5** Deploy, Eval | 40–48 | 🟡 In progress | README, EVAL.md, DEPLOY.md ✅; live URL ⬜ |
 
 ---
 
@@ -74,7 +74,7 @@ print(f\"{'TOTAL':<12} {sum(x[1] for x in rows):>12,} {sum(x[2] for x in rows):>
 - [x] Key decisions: Postgres + PostGIS + pgvector (`halfvec(512)`), fixed OpenAI embeddings, pluggable chat LLMs, LangGraph routing, hybrid SSE
 
 ### Phase 1 — infrastructure
-- [x] `docker-compose.yml` — Postgres + Redis (OrbStack)
+- [x] `docker-compose.yml` — Postgres + Redis (Docker)
 - [x] `Dockerfile.db` — PostGIS 16 + pgvector
 - [x] `init-extensions.sql` — schema + indexes (GIST, HNSW)
 - [x] `.env.example`, `.env`, `.gitignore`, `README.md`
@@ -100,7 +100,7 @@ print(f\"{'TOTAL':<12} {sum(x[1] for x in rows):>12,} {sum(x[2] for x in rows):>
 - [x] **Madrid sliced ingest** (2026-06-28) — [log](#2026-06-28--madrid-sliced-ingest-50k-listings)
 
 ### Issues resolved
-- [x] Postgres.app vs OrbStack port **5432** conflict
+- [x] Postgres.app vs Docker port **5432** conflict
 - [x] `halfvec` NULL insert — `CAST(:embedding AS halfvec)`
 - [x] pandas `NaN` in text columns — `null_if_nan()`
 - [x] Lisbon & Barcelona `calendar.csv` have **no `price` column** — ingest availability only; nightly price stored as `NULL` (use listing base price at query time). Amsterdam & Bergamo include calendar price.
@@ -138,19 +138,19 @@ print(f\"{'TOTAL':<12} {sum(x[1] for x in rows):>12,} {sum(x[2] for x in rows):>
 ## In progress / next up
 
 ### Phase 5 — submission (current)
-- [x] **README** — one-command run, Mermaid, data choice, trade-offs, cost/query, Loom script
+- [x] **README** — one-command run, Mermaid, data choice, trade-offs, cost/query
 - [x] **`EVAL.md`** — golden queries + rubric + manual scores
 - [x] **`DEPLOY.md`** + root `Dockerfile` + `railway.toml` for Railway
 - [x] **`scripts/run-local.sh`** — docker compose bootstrap
 - [ ] **Deploy** — Railway (API) + Vercel (frontend) + Supabase DB slice → live URL
-- [ ] **5-min Loom** — filter, NL, concierge, failure case
+- [ ] **Live deploy smoke test** — filter, NL, concierge, failure case on production URL
 
 ### Phase 4 — remaining (if time before submit)
 - [ ] UI polish (Booking-style density, guest selector, property type filter)
 
 ### Deferred / document as trade-off
 - [ ] Wire listing **search** HTTP endpoint cache (retrieval + batch paths cached)
-- [ ] `export_deploy.py` (Supabase slice), `enrich_reviews.py`
+- [ ] `enrich_reviews.py`
 - [ ] Hybrid query < 50ms benchmark
 - [ ] Document ingest slice strategy in README (raw vs validated, review caps, madrid `--limit`)
 
@@ -232,12 +232,12 @@ curl -s -N -X POST http://localhost:8000/api/chat/stream \
 
 **Terminal log (as run):**
 ```
-arsalankabeer@Arsalans-MacBook-Pro travel-ai-app % ollama pull qwen2.5:3b
+ $ ollama pull qwen2.5:3b
 ollama pull llama3.1:8b
 ...
 success 
 success 
-arsalankabeer@Arsalans-MacBook-Pro travel-ai-app % curl http://localhost:11434/api/tags
+ $ curl http://localhost:11434/api/tags
 ollama list
 {"models":[{"name":"llama3.1:8b",...},{"name":"qwen2.5:3b",...}]}
 NAME           ID              SIZE      MODIFIED           
@@ -279,7 +279,7 @@ python scripts/ingest.py --city madrid --limit 10100 --reviews-per-listing 7
 
 **Terminal log (as run):**
 ```
-(.venv) arsalankabeer@Arsalans-MacBook-Pro ingestion % python scripts/ingest.py --city madrid --limit 10100 --reviews-per-listing 7
+(venv) $ python scripts/ingest.py --city madrid --limit 10100 --reviews-per-listing 7
 
 
 === Ingesting madrid ===
@@ -314,7 +314,7 @@ Done.
 
 ### 2026-06-28 — Review re-ingest (7 reviews/listing)
 
-**Why:** After the [5-review full ingest](#2026-06-28--full-ingest-5-reviewslisting), DB had only **165,459 reviews** — below the assignment **≥200,000** minimum. Re-ran all cities with `--reviews-only --reviews-per-listing 7` to add more reviews **without re-embedding listings** (~$0 OpenAI cost).
+**Why:** After the [5-review full ingest](#2026-06-28--full-ingest-5-reviewslisting), DB had only **165,459 reviews** — below the **≥200,000** minimum. Re-ran all cities with `--reviews-only --reviews-per-listing 7` to add more reviews **without re-embedding listings** (~$0 OpenAI cost).
 
 **Why the earlier ~259K estimate was wrong (planning mistake):**
 
@@ -345,7 +345,7 @@ python scripts/ingest.py --city bergamo --reviews-only --reviews-per-listing 7
 
 **Terminal log (as run):**
 ```
-(.venv) arsalankabeer@Arsalans-MacBook-Pro ingestion % python scripts/ingest.py --city lisbon --reviews-only --reviews-per-listing 7
+(venv) $ python scripts/ingest.py --city lisbon --reviews-only --reviews-per-listing 7
 python scripts/ingest.py --city amsterdam --reviews-only --reviews-per-listing 7
 python scripts/ingest.py --city barcelona --reviews-only --reviews-per-listing 7
 python scripts/ingest.py --city bergamo --reviews-only --reviews-per-listing 7
@@ -476,7 +476,7 @@ python scripts/ingest.py --city bergamo
 
 **Terminal log (as run):**
 ```
-(.venv) arsalankabeer@Arsalans-MacBook-Pro ingestion % python scripts/ingest.py --city lisbon --reviews-only
+(venv) $ python scripts/ingest.py --city lisbon --reviews-only
 
 === Ingesting lisbon ===
   Reviews-only mode: 21,466 listings from DB
@@ -500,7 +500,7 @@ python scripts/ingest.py --city bergamo
     lisbon: 21,466
 
 Done.
-(.venv) arsalankabeer@Arsalans-MacBook-Pro ingestion % python scripts/ingest.py --city amsterdam
+(venv) $ python scripts/ingest.py --city amsterdam
 
 
 === Ingesting amsterdam ===
@@ -528,7 +528,7 @@ Embedding listings: 100%|██████████████████�
     lisbon: 21,466
 
 Done.
-(.venv) arsalankabeer@Arsalans-MacBook-Pro ingestion % python scripts/ingest.py --city barcelona
+(venv) $ python scripts/ingest.py --city barcelona
 
 
 === Ingesting barcelona ===
@@ -556,7 +556,7 @@ Embedding listings: 100%|██████████████████�
     lisbon: 21,466
 
 Done.
-(.venv) arsalankabeer@Arsalans-MacBook-Pro ingestion % python scripts/ingest.py --city bergamo
+(venv) $ python scripts/ingest.py --city bergamo
 
 
 === Ingesting bergamo ===
@@ -617,7 +617,7 @@ python scripts/ingest.py --city barcelona --limit 10 --skip-embeddings
 - Property detail, compare, wishlist, mock booking
 - Redis caching layer (container running; app not wired)
 - Supabase deploy slice + Railway/Vercel deployment
-- `EVAL.md`, README architecture diagram, 5-min Loom
+- `EVAL.md`, README architecture diagram
 
 ---
 
@@ -625,15 +625,15 @@ python scripts/ingest.py --city barcelona --limit 10 --skip-embeddings
 
 | Service | How to run | Connection |
 | :--- | :--- | :--- |
-| Postgres + PostGIS + pgvector | `docker compose up -d` (OrbStack) | `localhost:5432` / `travel_db` |
+| Postgres + PostGIS + pgvector | `docker compose up -d` (Docker) | `localhost:5432` / `travel_db` |
 | Redis | same compose | `localhost:6379` |
-| Ollama (chat dev) | Native on M4, not Docker | `localhost:11434` |
+| Ollama (chat dev) | Native on host, not Docker | `localhost:11434` |
 
 **Important:** Quit **Postgres.app** if ingest fails with `database "travel_db" does not exist` on `127.0.0.1:5432`.
 
 ---
 
-## Deliverables checklist (assignment)
+## Deliverables checklist
 
 | Deliverable | Status |
 | :--- | :--- |
@@ -641,7 +641,6 @@ python scripts/ingest.py --city barcelona --limit 10 --skip-embeddings
 | One-command local run | 🟡 DB only (`docker compose up`) |
 | Architecture diagram (README) | ⬜ |
 | Live deployed URL | ⬜ |
-| 5-min Loom | ⬜ |
 | `EVAL.md` | ⬜ |
 
 ---
@@ -660,18 +659,18 @@ python scripts/ingest.py --city barcelona --limit 10 --skip-embeddings
 
 ## Changelog
 
-### 2026-06-28 (backend assignment alignment: cache, batch summarize, trace)
+### 2026-06-28 (backend platform alignment: cache, batch summarize, trace)
 - **`app/cache.py`** — Redis + in-memory TTL fallback
 - Cache retrieval (5m), review synthesis (1h), compare (1h), per-listing summary (24h)
 - **`POST /api/batch/summarize`** — up to 20 listings via `asyncio.gather`
 - Compare extended to **5** listings; batch routes emit **`request_id`** → `/api/trace/{id}`
 
 ### 2026-06-28 (Phase 5 submission docs)
-- README rewrite: architecture Mermaid, trade-offs, cost estimate, Loom script
+- README rewrite: architecture Mermaid, trade-offs, cost estimate
 - EVAL.md golden queries G1–G6 with rubric
 - DEPLOY.md + Dockerfile + railway.toml + scripts/run-local.sh
 
-### 2026-06-28 (assignment alignment: compare, wishlist, concierge sync)
+### 2026-06-28 (platform alignment: compare, wishlist, concierge sync)
 - **`POST /api/batch/compare`** — 2–4 listings, side-by-side matrix + LLM verdict
 - **`GET /api/listings/by-ids`** — hydrate concierge hits on main list/map
 - **`/compare`**, **`/wishlist`** pages; ♡ save + compare checkboxes on cards
@@ -708,7 +707,7 @@ python scripts/ingest.py --city barcelona --limit 10 --skip-embeddings
 - README Phase 2 quick start; `.env.example` CORS + `frontend/.env.local.example`
 
 ### 2026-06-28 (madrid sliced ingest)
-- Added `madrid` to `ingest.py`; `--limit 10100 --reviews-per-listing 7` → **50,037 listings**, **262,461 reviews** — all assignment minimums ✅
+- Added `madrid` to `ingest.py`; `--limit 10100 --reviews-per-listing 7` → **50,037 listings**, **262,461 reviews** — all target minimums ✅
 
 ### 2026-06-28 (7 reviews/listing re-ingest)
 - All cities `--reviews-only --reviews-per-listing 7` → **222,329 reviews** in DB (≥200K ✅)
@@ -728,9 +727,9 @@ python scripts/ingest.py --city barcelona --limit 10 --skip-embeddings
 - Lisbon: 21,466 listings + embeddings in DB
 
 ### 2026-06-27 (later)
-- Raw data: 4 cities downloaded; assignment minimums verified
+- Raw data: 4 cities downloaded; target minimums verified
 - `ingest.py` updated for all 4 cities + case-insensitive folder lookup
-- Progress doc: assignment target table, raw data inventory, ingest pipeline details (90-day calendar, enrichments, env vars)
+- Progress doc: target minimums table, raw data inventory, ingest pipeline details (90-day calendar, enrichments, env vars)
 
 ### 2026-06-27
 - Initial progress doc after Phase 1 scaffold + Lisbon smoke test

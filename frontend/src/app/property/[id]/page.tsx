@@ -222,7 +222,6 @@ export default function PropertyPage() {
 
             <hr className="border-zinc-200" />
 
-            {/* Ratings — assignment: aspect scores */}
             <section>
               <h2 className="mb-6 text-[22px] font-semibold text-zinc-900">Reviews & ratings</h2>
               <RatingBreakdown
@@ -232,7 +231,6 @@ export default function PropertyPage() {
               />
             </section>
 
-            {/* AI summary — assignment requirement */}
             {listing.ai_summary && (
               <section className="rounded-xl border border-zinc-200 bg-zinc-50 p-6">
                 <h3 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">

@@ -131,10 +131,7 @@ export default function SearchPage() {
           offset: 0,
         }));
         setConciergeBanner(`Showing ${data.items.length} stays from concierge on map & list`);
-        window.requestAnimationFrame(() => {
-          mapRef.current?.fitToListings(data.items);
-          window.setTimeout(() => mapRef.current?.fitToListings(data.items), 200);
-        });
+        requestAnimationFrame(() => mapRef.current?.fitToListings(data.items));
       } catch (err) {
         setConciergeBanner(null);
         setError(err instanceof Error ? err.message : "Failed to load concierge stays");

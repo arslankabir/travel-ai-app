@@ -129,7 +129,6 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(
 
       if (map.isStyleLoaded() && map.getSource("listings")) {
         run();
-        window.setTimeout(run, 150);
         return;
       }
 

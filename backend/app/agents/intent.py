@@ -11,7 +11,7 @@ from app.agents.state import GraphState, IntentType, ParsedFilters
 CITIES = ("lisbon", "amsterdam", "barcelona", "bergamo", "madrid")
 SUPPORTED_CITIES_LABEL = "Lisbon, Amsterdam, Barcelona, Bergamo, and Madrid"
 
-# Common assignment/demo cities not in Inside Airbnb corpus
+# Cities outside the Inside Airbnb corpus (demo guardrails)
 UNSUPPORTED_CITY_HINTS = (
     "dubai", "paris", "london", "rome", "tokyo", "new york", "nyc",
     "berlin", "prague", "vienna", "istanbul", "singapore", "sydney",

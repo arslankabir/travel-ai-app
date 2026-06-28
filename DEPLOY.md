@@ -59,11 +59,7 @@ curl -N -X POST "https://API/api/chat/stream" \
   -d '{"user_input":"pool in Barcelona under 200","mode":"search"}'
 ```
 
-## 5. Loom prep
-
-Warm the Railway service (one health + one chat request) before recording to avoid cold-start SSE timeout.
-
-See README **Loom script** section for the 4 required demos.
+**Tip:** Warm the API before a live demo (health check + one chat request) to avoid cold-start SSE timeouts.
 
 ## Troubleshooting
 

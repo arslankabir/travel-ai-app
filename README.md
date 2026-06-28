@@ -1,7 +1,6 @@
 # Travel AI Platform
 
-AI-native travel discovery and booking — Full Stack AI Developer assignment.  
-Booking-style product (search, map, detail, wishlist, compare) with a **LangGraph multi-agent** concierge on top.
+AI-native travel discovery and booking: search, map, property detail, wishlist, compare, and a LangGraph multi-agent concierge.
 
 ## One-command local start
 
@@ -25,11 +24,11 @@ npm run dev
 
 Open **http://localhost:3000**
 
-**Prerequisites:** Docker (OrbStack/Docker Desktop), Node 18+, Python 3.11+, `OPENAI_API_KEY` in root `.env` (embeddings + optional OpenAI chat).
+**Prerequisites:** Docker Desktop, Node 18+, Python 3.11+, `OPENAI_API_KEY` in root `.env` (embeddings + optional OpenAI chat).
 
-**Local chat (optional):** `ollama pull qwen2.5:3b && ollama pull llama3.1:8b` — see `.env.example` Option A.
+**Local chat (optional):** `ollama pull qwen2.5:3b && ollama pull llama3.1:8b` — see `.env.example`.
 
-**First-time data:** ingest Inside Airbnb CSVs — see [Data](#data-choice) below or `proj-docs/proj-progress.md`.
+**First-time data:** ingest Inside Airbnb CSVs — see [Data](#data-choice) or `proj-docs/proj-progress.md`.
 
 ---
 
@@ -72,7 +71,7 @@ flowchart TB
   Agents --> OpenAI[(OpenAI embeddings + chat prod)]
 ```
 
-**Why LangGraph:** Intent-based routing (search vs review vs itinerary), shared `GraphState` between agents, and `astream_events` maps cleanly to hybrid SSE (`node_start`, `filters_parsed`, `citations_loaded`, `complete`) without custom orchestration code.
+**Why LangGraph:** Intent-based routing, shared `GraphState`, and `astream_events` maps to hybrid SSE without custom orchestration.
 
 ---
 
@@ -85,18 +84,18 @@ flowchart TB
 | **Concierge** | Intent → Retrieval → Review → Itinerary (`mode=concierge`) |
 | **Property detail** | Reviews, aspects, calendar, AI summary, mock Reserve |
 | **Wishlist** | `localStorage` + `/wishlist` |
-| **Compare** | 2–4 stays, matrix + `POST /api/batch/compare` AI verdict |
-| **Trace** | `GET /api/trace/{request_id}` — chat + batch routes (steps, latency, tokens) |
-| **Cache** | Redis (or in-memory fallback) — retrieval 5m, review/compare 1h, summaries 24h |
-| **Batch** | `POST /api/batch/compare` (2–5 stays), `POST /api/batch/summarize` (up to 20, parallel) |
+| **Compare** | 2–5 stays, matrix + `POST /api/batch/compare` AI verdict |
+| **Trace** | `GET /api/trace/{request_id}` — steps, latency, tokens |
+| **Cache** | Redis or in-memory — retrieval 5m, review/compare 1h, summaries 24h |
+| **Batch** | `POST /api/batch/compare`, `POST /api/batch/summarize` (parallel) |
 
-Full API docs: run backend → http://localhost:8000/docs
+API docs: http://localhost:8000/docs
 
 ---
 
 ## Data choice
 
-**Inside Airbnb** open data ([insideairbnb.com](https://insideairbnb.com/get-the-data/)) for **5 European cities**: Lisbon, Amsterdam, Barcelona, Bergamo, Madrid.
+**Inside Airbnb** ([insideairbnb.com](https://insideairbnb.com/get-the-data/)) — 5 European cities: Lisbon, Amsterdam, Barcelona, Bergamo, Madrid.
 
 | | Count |
 | :--- | ---: |
@@ -104,48 +103,32 @@ Full API docs: run backend → http://localhost:8000/docs
 | Reviews ingested | 262,461 |
 | Cities | 5 |
 
-**Why real data:** authentic prices, geo, reviews, and calendar for map + availability filters. Synthetic data would not exercise pgvector semantic search or review synthesis credibly.
-
-**Ingestion:** `ingestion/scripts/ingest.py` — 90-day calendar window, amenity normalization, OpenAI embeddings @ 512-dim (`halfvec`), capped reviews per listing. See `proj-docs/proj-progress.md` for logs.
+**Ingestion:** `ingestion/scripts/ingest.py` — 90-day calendar, amenity normalization, OpenAI embeddings @ 512-dim, capped reviews per listing.
 
 ---
 
 ## Key trade-offs
 
-1. **Local 50K+ / deploy ~10–15K slice** — free-tier DB limits; full pipeline proven locally.
-2. **Embeddings fixed to OpenAI 512-dim** — prevents vector space mismatch if chat LLM changes.
-3. **Chat LLMs pluggable** — Ollama locally, OpenAI in production (`EVAL.md` uses prod config).
-4. **Listing embeddings only** — review agent uses relational SQL, not 200K review vectors.
-5. **90-day calendar** — avoids multi-million calendar rows.
-6. **No auth** — wishlist in `localStorage` per brief.
-7. **No Dubai** — dataset is EU cities; unsupported-city message for out-of-scope queries.
-8. **Citation fallback** — when Ollama skips structured citations, links built from DB reviews.
-9. **Cache** — Redis when `REDIS_URL` set, else in-memory; retrieval/review/compare/summary TTLs documented in `app/cache.py`.
+1. **Local full corpus / deploy DB slice** — free-tier limits; pipeline proven locally.
+2. **Embeddings fixed to OpenAI 512-dim** — stable vector space across environments.
+3. **Chat LLMs pluggable** — Ollama locally, OpenAI in production.
+4. **Listing embeddings only** — review agent uses SQL, not full review vectors.
+5. **90-day calendar** — keeps calendar table bounded.
+6. **No auth** — wishlist in `localStorage`.
+7. **EU cities only** — unsupported-city message for out-of-corpus queries.
+8. **Citation fallback** — DB-backed links when LLM omits structured citations.
 
 ---
 
 ## Cost per query (production, OpenAI)
 
-| Query type | Approx tokens | Cost |
-| :--- | :--- | ---: |
-| NL search (intent + retrieval) | 800 in + 200 out | ~$0.0002 |
-| Search + review compare | 3K in + 800 out | ~$0.001 |
-| Full itinerary | 5K in + 2K out | ~$0.03 |
-| Embedding per semantic query | ~100 tokens | ~$0.000002 |
+| Query type | Approx cost |
+| :--- | ---: |
+| NL search | ~$0.0002 |
+| Search + review | ~$0.001 |
+| Full itinerary | ~$0.03 |
 
-**~1,000 queries/day** (80% search, 15% review, 5% itinerary) ≈ **$2–3/day**.
-
-One-time ingest embeddings ≈ **$0.10** for 50K listings.
-
----
-
-## With another week
-
-- Automated golden-query eval CI (`EVAL.md` → pytest)
-- Precomputed review summaries for all deploy listings
-- Redis cache for search/compare
-- Guest selector + property type filters in UI
-- Concierge itinerary → editable day cards with swap-out
+~1,000 queries/day ≈ **$2–3/day**.
 
 ---
 
@@ -157,16 +140,7 @@ See **[DEPLOY.md](./DEPLOY.md)** — Railway (API) + Vercel (frontend) + Supabas
 
 ## Evaluation
 
-See **[EVAL.md](./EVAL.md)** — golden queries, rubric, manual scores.
-
----
-
-## Loom script (~5 min)
-
-1. **Filter search** (30s) — Lisbon, price, dates → list + map sync.
-2. **NL search** (45s) — type golden query fragment → chips update → results refresh.
-3. **Complex concierge** (90s) — full Lisbon review query → pipeline steps → listings on map → citations → compare link.
-4. **Failure case** (45s) — "Dubai trip" → unsupported city message (or disconnect Ollama → graceful error).
+See **[EVAL.md](./EVAL.md)** — golden queries and rubric.
 
 ---
 
@@ -178,7 +152,7 @@ frontend/         Next.js 14 App Router
 ingestion/        Inside Airbnb ingest pipeline
 init-extensions.sql   PostGIS + pgvector schema
 docker-compose.yml    Postgres + Redis (local)
-proj-docs/        Plan, progress, assignment brief
+proj-docs/        Architecture notes and progress log
 ```
 
 ---
@@ -190,11 +164,5 @@ proj-docs/        Plan, progress, assignment brief
 | PostgreSQL | `localhost:5432` |
 | FastAPI | http://localhost:8000 |
 | Next.js | http://localhost:3000 |
-| Redis | `localhost:6379` (optional cache — not wired yet) |
+| Redis | `localhost:6379` (optional cache) |
 | Ollama | `localhost:11434` (local chat only) |
-
----
-
-## License
-
-Assignment submission — see repository owner for terms.

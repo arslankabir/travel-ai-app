@@ -16,10 +16,10 @@ development phases. Use this document to guide all code generation in Cursor.
 | **Embeddings (fixed)** | **OpenAI `text-embedding-3-small`** | **512-dim halfvec** in both local and production. Same model + dimensions everywhere to prevent vector space mismatch. ~$0.10 for full corpus. |
 | **Chat LLMs (pluggable)** | **Ollama (local dev) / OpenAI (production)** | Local: `qwen2.5:3b` (Intent/Review), `llama3.1:8b` (Itinerary). Production: `gpt-4o-mini`, `gpt-4o`. Switched via `.env` through `ModelFactory`. |
 | **Database (Unified)** | **PostgreSQL + PostGIS + pgvector** | One DB for relational, geospatial, and vector queries in a single hybrid SQL statement. |
-| **Local Container Env** | **OrbStack (macOS) / Docker** | `docker-compose up` for Postgres + optional Redis. Ollama runs natively on M4 GPU (not in Docker). |
+| **Local Container Env** | **Docker** | `docker-compose up` for Postgres + optional Redis. Ollama runs on the host (not in Docker). |
 | **Production Cloud** | **Vercel + Railway + Supabase** | Railway over Render (fewer cold-start issues for SSE demos). Supabase free tier for hosted Postgres. |
 
-### Why this stack (48-hour constraint)
+### Why this stack (time-boxed constraint)
 
 - **Unified Postgres** instead of Postgres + Qdrant + separate geo service: one connection, one query language, one deploy target.
 - **LangGraph** over CrewAI/AutoGen: graph-based conditional routing maps directly to Intent → (Search | Review | Itinerary) paths.
@@ -52,7 +52,7 @@ OPENAI_API_KEY=your_openai_key_here
 # ==============================================================================
 # CHAT LLM CONFIGURATION (Pluggable toggle for agent node execution)
 # ==============================================================================
-# Option A: Local chat agents (Ollama on M4 GPU)
+# Option A: Local chat agents (Ollama locally)
 LLM_PROVIDER=ollama
 LLM_BASE_URL=http://localhost:11434/v1
 LLM_MODEL_INTENT=qwen2.5:3b        # Local tool-calling / structured JSON
@@ -69,13 +69,13 @@ LLM_MODEL_ITINERARY=llama3.1:8b    # Itinerary generation (dev only)
 
 **Critical rules:**
 - Never switch embedding providers between ingest and query — vectors must share the same mathematical space.
-- Run EVAL golden queries and record Loom demo against **OpenAI production config** (graders hit deployed app).
+- Run EVAL golden queries against **OpenAI production config** on the deployed app.
 - Ollama does not return reliable token usage → telemetry/token counts are authoritative only under `LLM_PROVIDER=openai`.
 - **Chat LLMs (Ollama) ≠ embeddings (OpenAI):** retrieval semantic search always calls OpenAI embeddings; `OPENAI_API_KEY` must be set even when `LLM_PROVIDER=ollama`.
 
 ### Local Ollama setup (Option A — chat agents only)
 
-Ollama runs **natively on the Mac** (M4 GPU), not inside Docker.
+Ollama runs **natively on the host, not inside Docker.
 
 ```bash
 # 1. Install from https://ollama.com (app starts server on :11434)
@@ -104,7 +104,7 @@ ollama list
 
 **Cities:** Lisbon + Amsterdam (or Lisbon + Porto). Both exceed 50K listings / 200K reviews combined.
 
-**Golden-query note:** The brief's Dubai itinerary example cannot be served on real Airbnb data (Dubai not in Inside Airbnb). Demo itinerary planning on Lisbon/Amsterdam in EVAL.md and Loom; document this explicitly as a data-source constraint, not a product gap.
+**Golden-query note:** Dubai itinerary examples cannot be served on Inside Airbnb data. Demo itinerary planning on Lisbon/Amsterdam in EVAL.md; document as a data-source constraint.
 
 ### Real-data field reality (plan around this early)
 
@@ -135,7 +135,7 @@ ollama list
   │    ├── /scripts
   │    │    ├── ingest.py         # Main pipeline: Category A clean + Category B enrich + embed + load
   │    │    ├── enrich_reviews.py # Language detect, topic tags, per-property summary (deploy slice)
-  │    │    └── export_deploy.py  # Export downsampled slice for Supabase upload
+  │    │    └── ingest.py --limit  # Export downsampled slice for Supabase upload
   │    └── requirements.txt
   │
   ├── /backend
@@ -216,7 +216,7 @@ ollama list
 | Calendar | 90 days | Same window as local |
 | Embeddings | **512-dim halfvec** | Same schema as local; no re-embedding needed on deploy |
 
-**README must document:** local = full 50K+ proof of pipeline; deployed = engineered slice for free-tier limits. Loom demo shows both (local ingest stats + live deployed app).
+**README must document:** local = full 50K+ proof of pipeline; deployed = engineered slice for free-tier limits.
 
 ---
 
@@ -267,7 +267,7 @@ Run before DB load to minimize runtime API dependency.
 [Postgres bulk COPY insert] ──► halfvec(512) · PostGIS geometry · HNSW index
          │
          ▼
-[export_deploy.py] ──► Supabase upload slice (~10–15K listings)
+[ingest.py --limit] ──► Supabase upload slice (~10–15K listings)
 ```
 
 ---
@@ -298,7 +298,7 @@ class ModelFactory:
         if provider == "ollama":
             return ChatOpenAI(
                 base_url=base_url,
-                api_key="ollama-m4-local",
+                api_key="ollama-local",
                 model=model_name,
                 temperature=temperature,
             )
@@ -466,7 +466,7 @@ async def stream_chat(req: ChatRequest):
                     trace_store.save(request_id, trace)
                     yield f"data: {json.dumps({'event': 'complete', 'request_id': request_id, 'latency_ms': latency_ms})}\n\n"
 
-            # 5. Error handling (Loom failure demo)
+            # 5. Error handling (failure demo)
             elif kind == "on_chain_error":
                 node_name = event.get("metadata", {}).get("langgraph_node", "unknown")
                 trace.fail_step(node_name)
@@ -573,7 +573,7 @@ Use Redis if in docker-compose; fallback to `functools.lru_cache` for local dev 
 
 ---
 
-## 12. Phase-by-Phase 48-Hour Flow
+## 12. Phase-by-Phase Time-boxed Flow
 
 ### Phase 1: Database & Ingestion (Hours 0–8)
 
@@ -612,19 +612,15 @@ Use Redis if in docker-compose; fallback to `functools.lru_cache` for local dev 
 4. Redis/in-memory caching for search + summaries
 5. UI polish — Booking/Airbnb density, not generic Bootstrap
 
-### Phase 5: Deploy, Eval, Loom (Hours 40–48)
+### Phase 5: Deploy & Eval (Hours 40–48)
 
 1. Set `.env` to OpenAI production config on Railway
-2. Supabase: upload ~10–15K listing slice via `export_deploy.py`
+2. Supabase: upload ~10–15K listing slice via ingest with `--limit`
 3. Deploy FastAPI → Railway; Next.js → Vercel; env vars connected
-4. Warm Railway before Loom (avoid cold-start SSE failure)
+4. Warm Railway before demos (avoid cold-start SSE failure)
 5. Write `EVAL.md` — golden queries scored on **OpenAI production config**
 6. Write `README.md` — Mermaid diagram, one-command run, trade-offs, cost/query
-7. Record 5-min Loom:
-   - (a) traditional filter search
-   - (b) natural language search + chip sync
-   - (c) complex agent query (Lisbon review compare OR multi-night itinerary)
-   - (d) **failure case** — LLM timeout → partial results + error SSE event
+7. Run production smoke tests: filter search, NL search, concierge, failure case
 
 ---
 
@@ -640,7 +636,6 @@ Use Redis if in docker-compose; fallback to `functools.lru_cache` for local dev 
 | Key trade-offs | README.md | See §15 |
 | Cost per user query | README.md | See §14 |
 | Live deployed URL | Railway + Vercel + Supabase | |
-| 5-min Loom | — | 4 demo scenarios per brief |
 | EVAL.md | `/EVAL.md` | Golden queries on OpenAI config |
 
 ---
@@ -679,7 +674,7 @@ At 1,000 queries/day (80% search, 15% review, 5% itinerary): **~$2–3/day**.
 
 ## 16. LangGraph choice (README snippet, 3–5 lines)
 
-> We use LangGraph because the assignment requires four specialized agents with
+> We use LangGraph because four specialized agents with
 > conditional routing (search vs. review-deep-dive vs. itinerary), observable
 > intermediate steps over SSE, and structured state passing between nodes.
 > LangGraph's conditional edges, TypedDict state, and native `astream_events`

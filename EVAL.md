@@ -40,7 +40,7 @@ Record date, model config, and `request_id` (trace link) for each run.
 
 ---
 
-### G2 — Complex concierge (assignment golden query)
+### G2 — Complex concierge (golden query)
 
 **Query (concierge):**
 > Find me a quiet 1-bedroom in Lisbon near good restaurants for 3 nights in late June, under €130 a night, balcony if possible, no party-type buildings, and tell me which one has the most consistent reviews.

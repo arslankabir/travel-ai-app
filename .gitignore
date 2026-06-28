@@ -29,3 +29,6 @@ ingestion/raw_data/**/*.gz
 
 # Logs
 *.log
+
+# Internal docs (not for public repo)
+proj-docs/Full Stack AI Developer Assignment.md

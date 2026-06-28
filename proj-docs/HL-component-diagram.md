@@ -73,7 +73,7 @@ flowchart TB
 
     subgraph EXT["External Services"]
         OpenAI["OpenAI API<br/>embeddings ALWAYS<br/>chat LLMs in production"]
-        Ollama["Ollama — local dev only<br/>qwen2.5:3b · llama3.1:8b<br/>M4 GPU · not in Docker"]
+        Ollama["Ollama — local dev only<br/>qwen2.5:3b · llama3.1:8b<br/>host · not in Docker"]
     end
 
     FE -->|REST| REST
@@ -101,13 +101,13 @@ flowchart LR
     Railway --> Supabase["Supabase<br/>Postgres · halfvec 512"]
     Railway --> OpenAI["OpenAI API<br/>embeddings + chat LLMs"]
 
-    subgraph LocalDev["Local Dev — M4 Pro"]
+    subgraph LocalDev["Local Dev"]
         Docker["Docker<br/>Postgres + Redis"]
         Ollama["Ollama<br/>chat LLMs only"]
         IngestLocal["Ingestion Pipeline<br/>50K+ listings"]
         IngestLocal -->|OpenAI embeddings| OpenAI
         IngestLocal --> Docker
-        IngestLocal -->|export_deploy.py| Supabase
+        IngestLocal -->|ingest slice| Supabase
     end
 
     style User fill:#e8f4fc
@@ -180,7 +180,7 @@ flowchart TD
     E4 --> Load
 
     Load --> LocalDB[("Local DB<br/>50K+ listings · 200K+ reviews")]
-    Load --> Export["export_deploy.py"]
+    Load --> Export["ingest slice"]
     Export --> SupaDB[("Supabase<br/>~10–15K slice")]
 
     OpenAIEmb["OpenAI Embeddings API<br/>ALWAYS — not pluggable"] --> Embed
@@ -203,7 +203,7 @@ flowchart LR
     end
 
     subgraph Providers["Providers"]
-        Ollama["Ollama M4 GPU<br/>qwen2.5:3b · llama3.1:8b<br/>$0 dev cost"]
+        Ollama["Ollama local<br/>qwen2.5:3b · llama3.1:8b<br/>$0 dev cost"]
         OpenAIChat["OpenAI Cloud<br/>gpt-4o-mini · gpt-4o<br/>production + EVAL"]
         OpenAIEmb["OpenAI Embeddings<br/>text-embedding-3-small<br/>512-dim · ingest + query"]
     end
@@ -373,7 +373,7 @@ User: "Plan 4 nights in Lisbon, mid-range near metro + splurge night with view"
   → Retrieval → Review → Itinerary → complete
 ```
 
-### Query D: Failure case (Loom demo)
+### Query D: Failure case
 
 ```
 Review node timeout after retry ×2
@@ -400,4 +400,4 @@ Review node timeout after retry ×2
 | Global Concierge | `frontend/src/components/ChatConsole.tsx` |
 | FilterBar (chip sync) | `frontend/src/components/FilterBar.tsx` |
 | Ingestion Category A+B | `ingestion/scripts/ingest.py` |
-| Deploy export | `ingestion/scripts/export_deploy.py` |
+| Deploy export | `ingestion/scripts/ingest slice` |
