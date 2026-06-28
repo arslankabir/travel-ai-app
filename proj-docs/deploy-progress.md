@@ -13,7 +13,7 @@ Stack: **Supabase** (Postgres) · **Railway** (FastAPI) · **Vercel** (Next.js)
 | Extensions (`postgis`, `vector`) | ✅ | |
 | Schema (`init-extensions.sql`) | ✅ | tables: listings, reviews, calendar, listing_review_summaries |
 | Deploy data slice ingested | ✅ | 2026-06-28 — see logs below |
-| Railway API deployed | ⬜ | |
+| Railway API deployed | 🟡 | Build OK; healthcheck failed → fixed `$PORT` in Dockerfile |
 | Vercel frontend deployed | ⬜ | |
 | Production smoke test | ⬜ | filter, NL search, concierge, failure case |
 | Live URL in README / submission | ⬜ | |
@@ -138,7 +138,7 @@ SELECT COUNT(*) AS total_calendar FROM calendar;
 ### 1. Railway (API)
 
 1. New project → Deploy from GitHub → this repo.
-2. Set **Root Directory** / Dockerfile context to `backend/` (see `railway.toml`).
+2. Set **Root Directory** to `backend/` (or leave repo root — `railway.toml` points at `backend/Dockerfile`).
 3. Environment variables:
 
    | Variable | Value |
@@ -175,5 +175,7 @@ See [DEPLOY.md](../DEPLOY.md) §4 and [EVAL.md](../EVAL.md) golden queries.
 | :--- | :--- |
 | `python: command not found` | `cd ingestion && source .venv/bin/activate` before running script |
 | Connection refused / auth failed | URL-encode `%` in password; use direct port 5432 |
+| Build failed: Dockerfile not found | Set Root Directory to `backend` or use `railway.toml` → `backend/Dockerfile` |
+| Healthcheck failure after deploy | Dockerfile must bind `${PORT:-8000}` (Railway injects `PORT`) |
 | 0 listings on Railway | Wrong `DATABASE_URL` or CORS blocking frontend only |
 | Chat timeout on Railway | Warm with `/health` + one chat request; use OpenAI not Ollama |
