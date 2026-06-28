@@ -24,13 +24,13 @@ engine = create_engine(
 SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
 
 
-def check_db() -> bool:
+def check_db() -> tuple[bool, str | None]:
     try:
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
-        return True
-    except Exception:
-        return False
+        return True, None
+    except Exception as exc:
+        return False, f"{exc.__class__.__name__}: {exc}"[:240]
 
 
 def get_db() -> Generator[Session, None, None]:

@@ -74,7 +74,11 @@ If no port field: **Remove domain** → **Generate Domain** again (after deploy 
 
    **`DATABASE_URL` password:** URL-encode `%` as `%25` (same as ingest).
 
-4. **Redeploy** after pushing SSL + socat fixes.
+   **Still `db: false`?** Use Supabase **Session pooler** (IPv4-friendly for Railway):
+   Supabase → Connect → **Session pooler** → URI like
+   `postgresql://postgres.unrkkzzmeumoogivclpv:PASSWORD@aws-0-ap-northeast-2.pooler.supabase.com:5432/postgres`
+
+4. **Redeploy** after env changes.
 
 ### Verify
 
@@ -247,5 +251,5 @@ See [DEPLOY.md](../DEPLOY.md) §4 and [EVAL.md](../EVAL.md) golden queries.
 | Healthcheck failure after deploy | Dockerfile must bind `${PORT:-8000}` (Railway injects `PORT`) |
 | Public 502 but Deploy Logs show `/health` 200 | Set Networking **target port** to Deploy Log port (e.g. **8080**) |
 | Build failed: Dockerfile not found | Use repo root deploy + root `Dockerfile` (copies `backend/`) |
-| Listings 500 / health `db: false` | Fix `DATABASE_URL` on Railway (Supabase URI, URL-encode `%` in password) |
+| Listings 500 / health `db: false` | Wrong/missing `DATABASE_URL`; encode `%` in password; try **Session pooler** URI (IPv4) |
 | Chat timeout on Railway | Warm with `/health` + one chat request; use OpenAI not Ollama |

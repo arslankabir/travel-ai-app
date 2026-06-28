@@ -23,4 +23,8 @@ app.include_router(trace.router, prefix=settings.api_prefix)
 
 @app.get("/health")
 def health() -> dict[str, str | bool]:
-    return {"status": "ok", "db": check_db()}
+    db_ok, db_error = check_db()
+    payload: dict[str, str | bool] = {"status": "ok", "db": db_ok}
+    if not db_ok and db_error:
+        payload["db_error"] = db_error
+    return payload
