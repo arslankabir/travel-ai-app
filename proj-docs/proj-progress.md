@@ -182,6 +182,12 @@ curl -s -N -X POST http://localhost:8000/api/chat/stream \
 
 **Follow-up fix (same day):** Expanded chitchat patterns (`how you can help`, `can we talk`, `hellop`); concierge skips retrieval when no actionable filters. NL search now **replaces** filters (not merge) and clears map-bounds on each prompt — fixes multi-prompt session without page refresh.
 
+**Follow-up fix (golden queries):**
+- Retrieval **relaxes filters** stepwise when 0 results (dates → amenity → bedrooms → …)
+- **Price normalization:** "under €130" → `max_price` not `min_price`
+- **Unsupported cities** (e.g. Dubai) → clear message, no empty retrieval
+- Review/itinerary skip when 0 listings; no duplicate chat messages
+
 ---
 
 ### 2026-06-28 — Ollama setup + Phase 3 smoke
@@ -633,6 +639,9 @@ python scripts/ingest.py --city barcelona --limit 10 --skip-embeddings
 ---
 
 ## Changelog
+
+### 2026-06-28 (golden query retrieval fixes)
+- Filter relaxation fallback, price cap normalization, unsupported-city message, deduped review SSE
 
 ### 2026-06-28 (Phase 3 UX fixes — round 2)
 - Broader concierge chitchat: help/meta questions + typo greetings; no retrieval without travel filters

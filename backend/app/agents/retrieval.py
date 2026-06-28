@@ -1,7 +1,9 @@
 import json
+import re
 from datetime import date
 
 from sqlalchemy import text
+from sqlalchemy.orm import Session
 
 from app.agents.factory import ModelFactory
 from app.agents.state import GraphState, ListingHit, ParsedFilters
@@ -11,6 +13,15 @@ SELECT_COLS = """
     l.id, l.name, l.city, l.price, l.review_scores_rating, l.number_of_reviews,
     l.price_percentile, l.amenities
 """
+
+RELAX_STEPS: list[tuple[str, list[str]]] = [
+    ("dates", ["check_in", "check_out"]),
+    ("amenity", ["amenity"]),
+    ("bedrooms", ["bedrooms"]),
+    ("min_price", ["min_price"]),
+    ("min_rating", ["min_rating"]),
+    ("accommodates", ["accommodates"]),
+]
 
 
 def _build_where(filters: ParsedFilters) -> tuple[str, dict]:
@@ -73,72 +84,121 @@ def _rationale(row, semantic_score: float | None) -> str:
     return "; ".join(parts) if parts else "matches your filters"
 
 
-async def retrieval_agent(state: GraphState) -> dict:
-    filters = state.get("parsed_filters") or {}
-    query_text = filters.get("query_text") or state.get("user_input", "")
-    where_sql, params = _build_where(filters)
-
-    db = SessionLocal()
-    try:
-        use_vector = bool(query_text.strip())
-        rows = []
-
-        if use_vector:
-            embeddings = ModelFactory.get_embeddings()
-            vector = embeddings.embed_query(query_text)
-            vector_literal = "[" + ",".join(str(v) for v in vector) + "]"
-            params_with_vec = {**params, "query_vec": vector_literal, "limit": 8}
-            rows = db.execute(
-                text(
-                    f"""
-                    SELECT {SELECT_COLS},
-                           1 - (l.embedding <=> CAST(:query_vec AS halfvec)) AS semantic_score
-                    FROM listings l
-                    WHERE {where_sql}
-                    ORDER BY l.embedding <=> CAST(:query_vec AS halfvec)
-                    LIMIT :limit
-                    """
-                ),
-                params_with_vec,
-            ).fetchall()
-        else:
-            params_with_limit = {**params, "limit": 8}
-            rows = db.execute(
-                text(
-                    f"""
-                    SELECT {SELECT_COLS}, NULL::float AS semantic_score
-                    FROM listings l
-                    WHERE {where_sql}
-                    ORDER BY l.review_scores_rating DESC NULLS LAST, l.number_of_reviews DESC
-                    LIMIT :limit
-                    """
-                ),
-                params_with_limit,
-            ).fetchall()
-
-        listings: list[ListingHit] = []
-        for row in rows:
-            semantic = float(row.semantic_score) if row.semantic_score is not None else None
-            listings.append(
-                ListingHit(
-                    id=int(row.id),
-                    name=row.name,
-                    city=row.city,
-                    price=float(row.price),
-                    rating=float(row.review_scores_rating) if row.review_scores_rating is not None else None,
-                    reviews=int(row.number_of_reviews or 0),
-                    rationale=_rationale(row, semantic),
-                )
+def _rows_to_listings(rows) -> list[ListingHit]:
+    listings: list[ListingHit] = []
+    for row in rows:
+        semantic = float(row.semantic_score) if row.semantic_score is not None else None
+        listings.append(
+            ListingHit(
+                id=int(row.id),
+                name=row.name,
+                city=row.city,
+                price=float(row.price),
+                rating=float(row.review_scores_rating) if row.review_scores_rating is not None else None,
+                reviews=int(row.number_of_reviews or 0),
+                rationale=_rationale(row, semantic),
             )
-
-        summary = "\n".join(
-            f"- {h['name'] or 'Stay'} ({h['city']}): €{h['price']:.0f}/night, "
-            f"rating {h['rating'] or 'N/A'}, {h['reviews']} reviews — {h['rationale']}"
-            for h in listings
         )
-        return {
-            "listings": listings,
-            "response_text": f"Found {len(listings)} matching stays:\n{summary}",
-        }
+    return listings
+
+
+def _run_query(
+    db: Session,
+    filters: ParsedFilters,
+    query_text: str,
+    *,
+    limit: int = 8,
+) -> list:
+    where_sql, params = _build_where(filters)
+    use_vector = bool(query_text.strip())
+
+    if use_vector:
+        embeddings = ModelFactory.get_embeddings()
+        vector = embeddings.embed_query(query_text)
+        vector_literal = "[" + ",".join(str(v) for v in vector) + "]"
+        params_with_vec = {**params, "query_vec": vector_literal, "limit": limit}
+        return db.execute(
+            text(
+                f"""
+                SELECT {SELECT_COLS},
+                       1 - (l.embedding <=> CAST(:query_vec AS halfvec)) AS semantic_score
+                FROM listings l
+                WHERE {where_sql}
+                ORDER BY l.embedding <=> CAST(:query_vec AS halfvec)
+                LIMIT :limit
+                """
+            ),
+            params_with_vec,
+        ).fetchall()
+
+    params_with_limit = {**params, "limit": limit}
+    return db.execute(
+        text(
+            f"""
+            SELECT {SELECT_COLS}, NULL::float AS semantic_score
+            FROM listings l
+            WHERE {where_sql}
+            ORDER BY l.review_scores_rating DESC NULLS LAST, l.number_of_reviews DESC
+            LIMIT :limit
+            """
+        ),
+        params_with_limit,
+    ).fetchall()
+
+
+def _search_with_fallback(filters: ParsedFilters, query_text: str) -> tuple[list[ListingHit], str | None]:
+    db = SessionLocal()
+    relaxed: list[str] = []
+    try:
+        working = dict(filters)
+        rows = _run_query(db, working, query_text)
+        if rows:
+            return _rows_to_listings(rows), None
+
+        for label, keys in RELAX_STEPS:
+            changed = False
+            for key in keys:
+                if working.get(key) not in (None, ""):
+                    working[key] = None
+                    changed = True
+            if not changed:
+                continue
+            relaxed.append(label)
+            rows = _run_query(db, working, query_text)
+            if rows:
+                note = f"(Relaxed filters: dropped {', '.join(relaxed)} to find matches.)"
+                return _rows_to_listings(rows), note
+
+        return [], None
     finally:
         db.close()
+
+
+def _format_summary(listings: list[ListingHit], note: str | None) -> str:
+    if not listings:
+        return (
+            "Found 0 matching stays. Try widening your budget, dropping amenity or date "
+            "constraints, or searching in the NL bar on the main page."
+        )
+    lines = [
+        f"- {h['name'] or 'Stay'} ({h['city']}): €{h['price']:.0f}/night, "
+        f"rating {h['rating'] or 'N/A'}, {h['reviews']} reviews — {h['rationale']}"
+        for h in listings
+    ]
+    header = f"Found {len(listings)} matching stays:"
+    if note:
+        header += f"\n{note}"
+    return header + "\n" + "\n".join(lines)
+
+
+async def retrieval_agent(state: GraphState) -> dict:
+    filters = dict(state.get("parsed_filters") or {})
+    query_text = filters.get("query_text") or state.get("user_input", "")
+
+    listings, note = _search_with_fallback(filters, query_text)
+    summary = _format_summary(listings, note)
+
+    return {
+        "listings": listings,
+        "response_text": summary,
+    }

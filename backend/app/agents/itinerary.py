@@ -12,7 +12,7 @@ Format as markdown with Day 1, Day 2, etc."""
 async def itinerary_agent(state: GraphState) -> dict:
     listings = state.get("listings") or []
     if not listings:
-        return {"itinerary": "No listings available to plan an itinerary."}
+        return {"itinerary": None}
 
     stays = "\n".join(
         f"- ID {h['id']}: {h['name'] or 'Stay'} in {h['city']}, €{h['price']:.0f}/night"
@@ -27,7 +27,4 @@ async def itinerary_agent(state: GraphState) -> dict:
     result = await llm.ainvoke(prompt)
     content = result.content if isinstance(result.content, str) else str(result.content)
 
-    return {
-        "itinerary": content,
-        "response_text": state.get("response_text", "") + f"\n\n**Itinerary:**\n{content}",
-    }
+    return {"itinerary": content}

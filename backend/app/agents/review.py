@@ -37,7 +37,7 @@ def _validate_citations(citations: list[ReviewCitation], valid_ids: set[int]) ->
 async def review_agent(state: GraphState) -> dict:
     listings = state.get("listings") or []
     if not listings:
-        return {"response_text": state.get("response_text", "") + "\n\nNo listings to review."}
+        return {"review_summary": None, "citations": []}
 
     listing_ids = [h["id"] for h in listings[:5]]
     db = SessionLocal()
@@ -58,10 +58,7 @@ async def review_agent(state: GraphState) -> dict:
         db.close()
 
     if not rows:
-        return {
-            "response_text": state.get("response_text", "")
-            + "\n\nNo reviews found for these listings.",
-        }
+        return {"review_summary": "No reviews found for these listings.", "citations": []}
 
     valid_ids = {int(r.id) for r in rows}
     context_lines = [
@@ -87,9 +84,8 @@ async def review_agent(state: GraphState) -> dict:
         content = raw.content if isinstance(raw.content, str) else str(raw.content)
         match = re.search(r"\{.*\}", content, re.DOTALL)
         if not match:
-            return {"response_text": content, "citations": []}
+            return {"review_summary": content, "citations": []}
         result = ReviewOutput.model_validate(json.loads(match.group()))
 
     citations = _validate_citations(result.citations, valid_ids)
-    text_out = state.get("response_text", "") + f"\n\n**Review insights:** {result.summary}"
-    return {"response_text": text_out, "citations": citations}
+    return {"review_summary": result.summary, "citations": citations}

@@ -25,6 +25,8 @@ def route_after_intent(state: GraphState) -> str:
 def route_after_retrieval(state: GraphState) -> str:
     if state.get("mode") == "search":
         return END
+    if not state.get("listings"):
+        return END
     intent = state.get("intent_type")
     if intent == "search_only":
         return END

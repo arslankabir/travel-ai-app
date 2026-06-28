@@ -9,6 +9,13 @@ from app.agents.factory import ModelFactory
 from app.agents.state import GraphState, IntentType, ParsedFilters
 
 CITIES = ("lisbon", "amsterdam", "barcelona", "bergamo", "madrid")
+SUPPORTED_CITIES_LABEL = "Lisbon, Amsterdam, Barcelona, Bergamo, and Madrid"
+
+# Common assignment/demo cities not in Inside Airbnb corpus
+UNSUPPORTED_CITY_HINTS = (
+    "dubai", "paris", "london", "rome", "tokyo", "new york", "nyc",
+    "berlin", "prague", "vienna", "istanbul", "singapore", "sydney",
+)
 AMENITIES = ("wifi", "kitchen", "pool", "parking", "ac", "washer", "dryer", "tv", "heating", "elevator", "balcony", "hot_tub")
 
 INTENT_SYSTEM = """You parse travel search queries into structured filters.
@@ -101,6 +108,38 @@ def _chitchat_response(user_input: str) -> str:
     return CONCIERGE_GREETING
 
 
+def _detect_unsupported_city(user_input: str) -> str | None:
+    lower = user_input.lower()
+    if any(c in lower for c in CITIES):
+        return None
+    for name in UNSUPPORTED_CITY_HINTS:
+        if name in lower:
+            return name
+    return None
+
+
+def _unsupported_city_message(city: str) -> str:
+    return (
+        f"Our dataset covers {SUPPORTED_CITIES_LABEL} — not {city.title()}. "
+        "I can plan a similar trip in Lisbon or Barcelona instead. "
+        "Try: \"Plan a 4-night Barcelona trip for a couple near the metro, budget €400 total.\""
+    )
+
+
+def _normalize_price_filters(filters: ParsedFilters, user_input: str) -> ParsedFilters:
+    """Fix common LLM mistake: 'under €130' parsed as min_price instead of max_price."""
+    lower = user_input.lower()
+    under_match = re.search(r"(?:under|below|less than|max)\s*€?\s*(\d+)", lower)
+    if under_match:
+        cap = float(under_match.group(1))
+        filters["max_price"] = cap
+        if filters.get("min_price") == cap:
+            filters["min_price"] = None
+    if filters.get("min_price") and filters.get("max_price") and filters["min_price"] > filters["max_price"]:
+        filters["min_price"], filters["max_price"] = filters["max_price"], filters["min_price"]
+    return filters
+
+
 def _has_actionable_filters(filters: ParsedFilters) -> bool:
     actionable_keys = (
         "city", "check_in", "check_out", "min_price", "max_price",
@@ -162,6 +201,14 @@ def _to_parsed_filters(data: IntentOutput) -> ParsedFilters:
 async def intent_agent(state: GraphState) -> dict:
     user_input = state["user_input"]
 
+    unsupported = _detect_unsupported_city(user_input)
+    if unsupported and state.get("mode") == "concierge":
+        return {
+            "intent_type": "chitchat",
+            "parsed_filters": None,
+            "response_text": _unsupported_city_message(unsupported),
+        }
+
     if state.get("mode") == "concierge" and _is_chitchat(user_input):
         return {
             "intent_type": "chitchat",
@@ -187,7 +234,7 @@ async def intent_agent(state: GraphState) -> dict:
         except Exception:
             result = _heuristic_intent(user_input)
 
-    filters = _to_parsed_filters(result)
+    filters = _normalize_price_filters(_to_parsed_filters(result), user_input)
     intent_type: IntentType = result.intent_type
 
     if state["mode"] == "concierge" and intent_type == "search_only" and not _has_actionable_filters(filters):

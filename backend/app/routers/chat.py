@@ -105,8 +105,9 @@ async def stream_chat(req: ChatRequest) -> StreamingResponse:
                                 "event": "citations_loaded",
                                 "citations": output_data["citations"],
                             })
-                        if output_data.get("response_text"):
-                            yield _sse({"event": "message", "text": output_data["response_text"]})
+                        summary = output_data.get("review_summary")
+                        if summary:
+                            yield _sse({"event": "message", "text": f"**Review insights:** {summary}"})
 
                     if node == "itinerary_agent" and isinstance(output_data, dict):
                         if output_data.get("itinerary"):
