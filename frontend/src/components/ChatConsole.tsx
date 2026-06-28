@@ -60,12 +60,13 @@ export default function ChatConsole({ onListingsLoaded }: ChatConsoleProps) {
   >([]);
   const abortRef = useRef<AbortController | null>(null);
   const streamBuffer = useRef("");
+  const nodesStartedRef = useRef(new Set<string>());
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({
       top: scrollRef.current.scrollHeight,
-      behavior: "smooth",
+      behavior: streaming ? "auto" : "smooth",
     });
   }, [messages, citations, pipelineSteps, streaming, awaitingReview, afterListings, runMetrics]);
 
@@ -105,9 +106,16 @@ export default function ChatConsole({ onListingsLoaded }: ChatConsoleProps) {
     }
 
     if (event.event === "node_start" && event.node) {
+      if (nodesStartedRef.current.has(event.node)) return;
+      nodesStartedRef.current.add(event.node);
+
       if (event.node === "review_agent") {
         setAwaitingReview(true);
         setAfterListings(false);
+      }
+      if (event.node === "itinerary_agent") {
+        finishReviewPhase();
+        streamBuffer.current = "";
       }
       setPipelineSteps((prev) => markNodeStarted(prev, event.node!));
       return;
@@ -144,12 +152,24 @@ export default function ChatConsole({ onListingsLoaded }: ChatConsoleProps) {
 
     if (event.event === "itinerary" && event.text) {
       finishReviewPhase();
-      setMessages((prev) => [...prev, { role: "assistant", content: event.text! }]);
+      streamBuffer.current = event.text;
+      setMessages((prev) => {
+        const copy = [...prev];
+        const last = copy[copy.length - 1];
+        if (last?.role === "assistant") {
+          copy[copy.length - 1] = { role: "assistant", content: event.text! };
+        } else {
+          copy.push({ role: "assistant", content: event.text! });
+        }
+        return copy;
+      });
+      setPipelineSteps((prev) => markNodeDone(prev, "itinerary_agent"));
       return;
     }
 
     if (event.event === "citations_loaded" && event.citations) {
       setCitations(event.citations);
+      setPipelineSteps((prev) => markNodeDone(prev, "review_agent"));
       finishReviewPhase();
       return;
     }
@@ -184,6 +204,7 @@ export default function ChatConsole({ onListingsLoaded }: ChatConsoleProps) {
     setAwaitingReview(false);
     setAfterListings(false);
     streamBuffer.current = "";
+    nodesStartedRef.current = new Set();
     setMessages((prev) => [...prev, { role: "user", content: text }]);
 
     setStreaming(true);
@@ -220,7 +241,11 @@ export default function ChatConsole({ onListingsLoaded }: ChatConsoleProps) {
     }
   };
 
-  const showLoading = streaming && (awaitingReview || afterListings || pipelineSteps.some((s) => s.status === "running"));
+  const showLoading =
+    streaming &&
+    (awaitingReview ||
+      afterListings ||
+      pipelineSteps.some((s) => s.status === "running" && s.id !== "itinerary_agent"));
 
   return (
     <>

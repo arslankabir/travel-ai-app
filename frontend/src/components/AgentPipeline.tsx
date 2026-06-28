@@ -200,6 +200,8 @@ export function LoadingStatus({
   } else if (afterListings) {
     loadingText = "Preparing review analysis…";
     upNext = ["guest reviews", "review summary", "source links"];
+  } else if (active?.id === "itinerary_agent") {
+    return null;
   } else if (active) {
     loadingText = AGENT_META[active.id]?.loadingText ?? "Processing…";
   }

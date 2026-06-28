@@ -41,6 +41,8 @@ async def stream_chat(req: ChatRequest) -> StreamingResponse:
         }
 
         final_output: dict = {}
+        nodes_started: set[str] = set()
+        itinerary_tokens_sent = False
 
         try:
             async for event in app_graph.astream_events(initial_state, version="v2"):
@@ -48,7 +50,8 @@ async def stream_chat(req: ChatRequest) -> StreamingResponse:
 
                 if kind == "on_chain_start":
                     node = event.get("metadata", {}).get("langgraph_node")
-                    if node:
+                    if node and node not in nodes_started:
+                        nodes_started.add(node)
                         trace.start_step(node)
                         yield _sse({"event": "node_start", "node": node})
 
@@ -60,6 +63,7 @@ async def stream_chat(req: ChatRequest) -> StreamingResponse:
                     chunk = event.get("data", {}).get("chunk")
                     content = getattr(chunk, "content", None) if chunk else None
                     if content:
+                        itinerary_tokens_sent = True
                         yield _sse({"event": "token", "token": content})
 
                 elif kind == "on_chat_model_end":
@@ -110,8 +114,10 @@ async def stream_chat(req: ChatRequest) -> StreamingResponse:
                             yield _sse({"event": "message", "text": f"**Review insights:** {summary}"})
 
                     if node == "itinerary_agent" and isinstance(output_data, dict):
-                        if output_data.get("itinerary"):
-                            yield _sse({"event": "itinerary", "text": output_data["itinerary"]})
+                        itinerary = output_data.get("itinerary")
+                        # Avoid duplicate full-text flash when tokens were already streamed
+                        if itinerary and not itinerary_tokens_sent:
+                            yield _sse({"event": "itinerary", "text": itinerary})
 
                     if event.get("name") == "LangGraph":
                         latency_ms = int((time.time() - start_time) * 1000)
