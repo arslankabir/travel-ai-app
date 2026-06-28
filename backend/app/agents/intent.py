@@ -48,19 +48,57 @@ def _repair_json(text: str) -> dict:
     return json.loads(match.group())
 
 
-CHITCHAT_RE = re.compile(r"^(hi|hello|hey|thanks|thank you|yo|sup|howdy)[\s!.?]*$", re.I)
+CHITCHAT_RE = re.compile(
+    r"^(hi|hello|hey|hii+|hellop+|thanks|thank you|yo|sup|howdy)[\s!.?]*$",
+    re.I,
+)
+
+HELP_PHRASES = (
+    "how can you help",
+    "how you can help",
+    "how do you help",
+    "what can you do",
+    "what do you do",
+    "can you help",
+    "can we talk",
+    "who are you",
+    "what are you",
+    "help me",
+)
 
 CONCIERGE_GREETING = (
     "Hello! I can help you find stays, compare guest reviews, or plan a multi-day trip. "
     "Try: \"Find a quiet 1-bed in Lisbon under €130 with good reviews.\""
 )
 
+CONCIERGE_HELP = (
+    "I can search stays by city, price, and amenities; compare guest review themes with citations; "
+    "and draft multi-day itineraries. Tell me a destination and what matters to you — "
+    "e.g. \"quiet 1-bed in Lisbon under €130 with consistent reviews.\""
+)
+
 
 def _is_chitchat(user_input: str) -> bool:
     text = user_input.strip()
+    lower = text.lower()
     if len(text) < 4:
         return True
-    return bool(CHITCHAT_RE.match(text))
+    if CHITCHAT_RE.match(text):
+        return True
+    if any(phrase in lower for phrase in HELP_PHRASES):
+        return True
+    # Meta questions with no city, price, or travel keywords
+    has_travel_signal = any(c in lower for c in CITIES) or bool(re.search(r"\d|€|euro|night|bed|review|trip|stay", lower))
+    if not has_travel_signal and any(w in lower for w in ("help", "talk", "who", "what can", "how")):
+        return True
+    return False
+
+
+def _chitchat_response(user_input: str) -> str:
+    lower = user_input.strip().lower()
+    if any(p in lower for p in ("help", "what can", "how", "who")):
+        return CONCIERGE_HELP
+    return CONCIERGE_GREETING
 
 
 def _has_actionable_filters(filters: ParsedFilters) -> bool:
@@ -128,7 +166,7 @@ async def intent_agent(state: GraphState) -> dict:
         return {
             "intent_type": "chitchat",
             "parsed_filters": None,
-            "response_text": CONCIERGE_GREETING,
+            "response_text": _chitchat_response(user_input),
         }
 
     llm = ModelFactory.get_llm("intent")
@@ -151,6 +189,13 @@ async def intent_agent(state: GraphState) -> dict:
 
     filters = _to_parsed_filters(result)
     intent_type: IntentType = result.intent_type
+
+    if state["mode"] == "concierge" and intent_type == "search_only" and not _has_actionable_filters(filters):
+        return {
+            "intent_type": "chitchat",
+            "parsed_filters": None,
+            "response_text": _chitchat_response(user_input),
+        }
 
     if state["mode"] == "search":
         intent_type = "search_only"

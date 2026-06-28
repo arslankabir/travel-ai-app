@@ -180,6 +180,8 @@ curl -s -N -X POST http://localhost:8000/api/chat/stream \
 
 **Known limitation:** NL search updates traditional SQL filters only (city, price, beds, etc.) — not pure vibe/semantic queries on the main list yet.
 
+**Follow-up fix (same day):** Expanded chitchat patterns (`how you can help`, `can we talk`, `hellop`); concierge skips retrieval when no actionable filters. NL search now **replaces** filters (not merge) and clears map-bounds on each prompt — fixes multi-prompt session without page refresh.
+
 ---
 
 ### 2026-06-28 — Ollama setup + Phase 3 smoke
@@ -631,6 +633,10 @@ python scripts/ingest.py --city barcelona --limit 10 --skip-embeddings
 ---
 
 ## Changelog
+
+### 2026-06-28 (Phase 3 UX fixes — round 2)
+- Broader concierge chitchat: help/meta questions + typo greetings; no retrieval without travel filters
+- NL search: replace filters per prompt, disable map bounds, abort in-flight stream, clear input after apply
 
 ### 2026-06-28 (Phase 3 UX fixes)
 - Concierge chitchat guard; suppress intent JSON in SSE; NL search filter merge + chips

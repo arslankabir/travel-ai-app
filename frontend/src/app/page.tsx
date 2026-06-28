@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import FilterBar from "@/components/FilterBar";
 import ListingList from "@/components/ListingList";
@@ -29,6 +29,26 @@ export default function SearchPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hoveredId, setHoveredId] = useState<number | null>(null);
+  const nlAbortRef = useRef<AbortController | null>(null);
+
+  const handleNlFilters = useCallback((parsed: Partial<SearchFilters>) => {
+    nlAbortRef.current?.abort();
+    setUseMapBounds(false);
+    setFilters({
+      sort: "rating_desc",
+      limit: 20,
+      offset: 0,
+      city: parsed.city,
+      check_in: parsed.check_in,
+      check_out: parsed.check_out,
+      min_price: parsed.min_price,
+      max_price: parsed.max_price,
+      min_rating: parsed.min_rating,
+      accommodates: parsed.accommodates,
+      bedrooms: parsed.bedrooms,
+      amenity: parsed.amenity,
+    });
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -67,9 +87,8 @@ export default function SearchPage() {
       </header>
 
       <NaturalLanguageBar
-        onFiltersParsed={(parsed) =>
-          setFilters((prev) => ({ ...prev, ...parsed, offset: 0 }))
-        }
+        onFiltersParsed={handleNlFilters}
+        abortRef={nlAbortRef}
       />
 
       <FilterBar

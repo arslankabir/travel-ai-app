@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState, type RefObject } from "react";
 
 import { SearchFilters } from "@/lib/api";
 import { streamChat } from "@/lib/sse";
 
 interface NaturalLanguageBarProps {
   onFiltersParsed: (filters: Partial<SearchFilters>) => void;
+  abortRef?: RefObject<AbortController | null>;
 }
 
 const FILTER_KEYS = [
@@ -51,24 +52,36 @@ function buildChips(raw: Record<string, unknown>): string[] {
   }).map((key) => `${CHIP_LABELS[key]}: ${raw[key]}`);
 }
 
-export default function NaturalLanguageBar({ onFiltersParsed }: NaturalLanguageBarProps) {
+export default function NaturalLanguageBar({ onFiltersParsed, abortRef }: NaturalLanguageBarProps) {
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
   const [parsedChips, setParsedChips] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [hint, setHint] = useState<string | null>(null);
+  const localAbortRef = useRef<AbortController | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!query.trim() || loading) return;
+
+    localAbortRef.current?.abort();
+    abortRef?.current?.abort();
+    const controller = new AbortController();
+    localAbortRef.current = controller;
+    if (abortRef) {
+      abortRef.current = controller;
+    }
 
     setLoading(true);
     setError(null);
     setHint(null);
     setParsedChips([]);
 
+    const submitted = query.trim();
+
     try {
-      await streamChat(query.trim(), "search", (event) => {
+      let applied = false;
+      await streamChat(submitted, "search", (event) => {
         if (event.event === "filters_parsed" && event.filters) {
           const mapped = mapParsedToFilters(event.filters);
           const chips = buildChips(event.filters);
@@ -78,15 +91,24 @@ export default function NaturalLanguageBar({ onFiltersParsed }: NaturalLanguageB
           }
           onFiltersParsed(mapped);
           setParsedChips(chips);
+          applied = true;
         }
         if (event.event === "error") {
           setError(event.message ?? "Search parse failed");
         }
-      });
+      }, controller.signal);
+
+      if (applied) {
+        setQuery("");
+      }
     } catch (err) {
+      if (err instanceof Error && err.name === "AbortError") return;
       setError(err instanceof Error ? err.message : "Search parse failed");
     } finally {
       setLoading(false);
+      if (localAbortRef.current === controller) {
+        localAbortRef.current = null;
+      }
     }
   };
 
