@@ -13,7 +13,7 @@ Stack: **Supabase** (Postgres) · **Railway** (FastAPI) · **Vercel** (Next.js)
 | Extensions (`postgis`, `vector`) | ✅ | |
 | Schema (`init-extensions.sql`) | ✅ | tables: listings, reviews, calendar, listing_review_summaries |
 | Deploy data slice ingested | ✅ | 2026-06-28 — see logs below |
-| Railway API deployed | 🟡 | Domain live but **502** — verify Root Directory + env vars (see below) |
+| Railway API deployed | 🟡 | `/health` ✅ · listings 500 → SSL + verify `DATABASE_URL` |
 | Vercel frontend deployed | ⬜ | |
 | Production smoke test | ⬜ | filter, NL search, concierge, failure case |
 | Live URL in README / submission | ⬜ | API: `https://travel-ai-app-production-bc05.up.railway.app` |
@@ -72,7 +72,9 @@ If no port field: **Remove domain** → **Generate Domain** again (after deploy 
 
    **Remove** `REDIS_URL=redis://localhost:6379/0` — no Redis on Railway.
 
-4. **Redeploy** after pushing `backend/railway.toml` + PORT Dockerfile fix.
+   **`DATABASE_URL` password:** URL-encode `%` as `%25` (same as ingest).
+
+4. **Redeploy** after pushing SSL + socat fixes.
 
 ### Verify
 
@@ -210,7 +212,7 @@ SELECT COUNT(*) AS total_calendar FROM calendar;
 
    | Variable | Value |
    | :--- | :--- |
-   | `DATABASE_URL` | Supabase URI (same as ingest) |
+   | `DATABASE_URL` | Supabase URI (`?sslmode=require` optional — auto-added for remote hosts) |
    | `OPENAI_API_KEY` | Production key |
    | `LLM_PROVIDER` | `openai` |
    | `LLM_BASE_URL` | `https://api.openai.com/v1` |
@@ -245,5 +247,5 @@ See [DEPLOY.md](../DEPLOY.md) §4 and [EVAL.md](../EVAL.md) golden queries.
 | Healthcheck failure after deploy | Dockerfile must bind `${PORT:-8000}` (Railway injects `PORT`) |
 | Public 502 but Deploy Logs show `/health` 200 | Set Networking **target port** to Deploy Log port (e.g. **8080**) |
 | Build failed: Dockerfile not found | Use repo root deploy + root `Dockerfile` (copies `backend/`) |
-| 0 listings on Railway | Wrong `DATABASE_URL` or CORS blocking frontend only |
+| Listings 500 / health `db: false` | Fix `DATABASE_URL` on Railway (Supabase URI, URL-encode `%` in password) |
 | Chat timeout on Railway | Warm with `/health` + one chat request; use OpenAI not Ollama |

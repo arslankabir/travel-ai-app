@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.db.connection import check_db
 from app.config import settings
 from app.routers import batch, chat, listings, trace
 
@@ -21,5 +22,5 @@ app.include_router(trace.router, prefix=settings.api_prefix)
 
 
 @app.get("/health")
-def health() -> dict[str, str]:
-    return {"status": "ok"}
+def health() -> dict[str, str | bool]:
+    return {"status": "ok", "db": check_db()}
