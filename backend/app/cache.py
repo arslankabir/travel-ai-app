@@ -16,7 +16,11 @@ class CacheStore:
             try:
                 import redis
 
-                self._redis = redis.from_url(settings.redis_url, decode_responses=True)
+                self._redis = redis.from_url(
+                    settings.redis_url,
+                    decode_responses=True,
+                    socket_connect_timeout=1,
+                )
                 self._redis.ping()
             except Exception:
                 self._redis = None

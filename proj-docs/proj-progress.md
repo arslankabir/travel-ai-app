@@ -662,8 +662,8 @@ python scripts/ingest.py --city barcelona --limit 10 --skip-embeddings
 ## Changelog
 
 ### 2026-06-28 (Railway deploy — 502 troubleshooting)
-- Railway service `travel-ai-app-production-bc05.up.railway.app` — build OK, public 502
-- Fixed Dockerfile `$PORT`; added `backend/railway.toml` for monorepo Root Directory = `backend`
+- Railway URL returns 502 — likely Root Directory / port mismatch
+- Added repo-root `Dockerfile` for monorepo; binds `${PORT}`; fast-fail Redis connect
 
 ### 2026-06-28 (Supabase deploy slice ingested)
 - Supabase schema live; smoke + full slice via `scripts/ingest-deploy-slice.sh`

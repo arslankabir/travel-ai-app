@@ -1,7 +1,6 @@
-# Repo-root config (optional). Prefer backend/railway.toml with Root Directory = backend.
 [build]
 builder = "DOCKERFILE"
-dockerfilePath = "backend/Dockerfile"
+dockerfilePath = "Dockerfile"
 watchPatterns = ["backend/**"]
 
 [deploy]

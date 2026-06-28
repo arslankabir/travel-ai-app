@@ -28,9 +28,10 @@ Stack: **Supabase** (Postgres) · **Railway** (FastAPI) · **Vercel** (Next.js)
 
 ### Required Railway settings
 
-1. **Settings → Root Directory:** `backend` (not repo root)
+1. **Settings → Root Directory:** leave **empty** (repo root). Root `Dockerfile` copies `backend/`.
 2. **Settings → Networking → Generate Domain** (done)
-3. **Variables** (must all be set):
+3. **Networking → Port:** leave **Auto** (must match Railway `$PORT`, not hardcoded 8000)
+4. **Variables** (must all be set):
 
    | Variable | Value |
    | :--- | :--- |
@@ -180,7 +181,7 @@ SELECT COUNT(*) AS total_calendar FROM calendar;
 ### 1. Railway (API)
 
 1. New project → Deploy from GitHub → this repo.
-2. Set **Root Directory** to `backend/` (or leave repo root — `railway.toml` points at `backend/Dockerfile`).
+2. Railway reads root `Dockerfile` (copies `backend/`). **Do not** set Root Directory to `backend`.
 3. Environment variables:
 
    | Variable | Value |
@@ -218,7 +219,7 @@ See [DEPLOY.md](../DEPLOY.md) §4 and [EVAL.md](../EVAL.md) golden queries.
 | `python: command not found` | `cd ingestion && source .venv/bin/activate` before running script |
 | Connection refused / auth failed | URL-encode `%` in password; use direct port 5432 |
 | Healthcheck failure after deploy | Dockerfile must bind `${PORT:-8000}` (Railway injects `PORT`) |
-| Public 502 but deploy shows Active | Root Directory must be `backend`; check Deploy Logs for crash; remove `REDIS_URL=localhost` |
-| Build failed: Dockerfile not found | Set Root Directory to `backend` or use `backend/railway.toml` |
+| Public 502 but deploy shows Active | Clear Root Directory (use repo root + root `Dockerfile`); remove `REDIS_URL=localhost`; check Networking port = Auto |
+| Build failed: Dockerfile not found | Use repo root deploy + root `Dockerfile` (copies `backend/`) |
 | 0 listings on Railway | Wrong `DATABASE_URL` or CORS blocking frontend only |
 | Chat timeout on Railway | Warm with `/health` + one chat request; use OpenAI not Ollama |
