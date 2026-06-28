@@ -143,7 +143,8 @@ print(f\"{'TOTAL':<12} {sum(x[1] for x in rows):>12,} {sum(x[2] for x in rows):>
 - [x] **`DEPLOY.md`** + root `Dockerfile` + `railway.toml` for Railway
 - [x] **`scripts/run-local.sh`** — docker compose bootstrap
 - [x] **Supabase DB slice** — schema + ingest (11,850 listings, 56,007 reviews) — see [deploy-progress.md](./deploy-progress.md)
-- [ ] **Deploy** — Railway (API) + Vercel (frontend) → live URL
+- [ ] **Railway API** — domain generated; **502 on public URL** — fix Root Directory + redeploy
+- [ ] **Vercel frontend** → live URL
 - [ ] **Live deploy smoke test** — filter, NL, concierge, failure case on production URL
 
 ### Phase 4 — remaining (if time before submit)
@@ -659,6 +660,10 @@ python scripts/ingest.py --city barcelona --limit 10 --skip-embeddings
 ---
 
 ## Changelog
+
+### 2026-06-28 (Railway deploy — 502 troubleshooting)
+- Railway service `travel-ai-app-production-bc05.up.railway.app` — build OK, public 502
+- Fixed Dockerfile `$PORT`; added `backend/railway.toml` for monorepo Root Directory = `backend`
 
 ### 2026-06-28 (Supabase deploy slice ingested)
 - Supabase schema live; smoke + full slice via `scripts/ingest-deploy-slice.sh`
