@@ -129,6 +129,53 @@ export async function fetchListingDetail(id: string): Promise<ListingDetail> {
   return res.json();
 }
 
+export async function fetchListingsByIds(ids: string[]): Promise<ListingsResponse> {
+  if (ids.length === 0) {
+    return { total: 0, limit: 0, offset: 0, items: [] };
+  }
+  const res = await fetch(
+    `${API_BASE}/api/listings/by-ids?ids=${encodeURIComponent(ids.join(","))}`,
+    { cache: "no-store" },
+  );
+  if (!res.ok) {
+    throw new Error(`Listings by IDs failed (${res.status})`);
+  }
+  return res.json();
+}
+
+export interface CompareListingItem {
+  id: string;
+  name: string | null;
+  city: string;
+  neighborhood: string | null;
+  price: number;
+  review_scores_rating: number | null;
+  number_of_reviews: number;
+  accommodates: number | null;
+  bedrooms: number | null;
+  amenities: string[];
+}
+
+export interface CompareResponse {
+  listings: CompareListingItem[];
+  verdict: string;
+}
+
+export async function fetchCompare(listingIds: string[]): Promise<CompareResponse> {
+  const res = await fetch(`${API_BASE}/api/batch/compare`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      listing_ids: listingIds.map((id) => id),
+    }),
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    throw new Error(`Compare failed (${res.status})`);
+  }
+  return res.json();
+}
+
 export const CITIES = [
   "lisbon",
   "amsterdam",

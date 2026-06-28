@@ -60,7 +60,7 @@ print(f\"{'TOTAL':<12} {sum(x[1] for x in rows):>12,} {sum(x[2] for x in rows):>
 | **1** Database & Ingestion | 0–8 | ✅ Done | 5 cities in DB; all minimums met |
 | **2** Core Search & Map | 8–18 | ✅ Done | FastAPI listings + Next.js map UI |
 | **3** AI Layer | 18–32 | ✅ Done | LangGraph, hybrid SSE, NL search, concierge, trace, golden-query fixes |
-| **4** Detail, Compare, Polish | 32–40 | 🟡 Partial | Detail page + mock booking + citations ✅; compare/wishlist ⬜ |
+| **4** Detail, Compare, Polish | 32–40 | ✅ Done | Detail, booking, wishlist, compare, concierge→map sync |
 | **5** Deploy, Eval, Loom | 40–48 | 🟡 In progress | README polish, live URL, `EVAL.md`, 5-min video ⬜ |
 
 ---
@@ -121,12 +121,15 @@ print(f\"{'TOTAL':<12} {sum(x[1] for x in rows):>12,} {sum(x[2] for x in rows):>
 - [x] Chitchat guard, unsupported-city message, golden-query retrieval fixes
 - [x] **Ollama Option A verified** — see [log](#2026-06-28--ollama-setup--phase-3-smoke)
 
-### Phase 4 — detail & booking (core)
+### Phase 4 — detail, compare & wishlist
 - [x] `GET /api/listings/{id}/detail` — reviews, calendar, aspect scores, AI summary
 - [x] `/property/[id]` — photos, amenities, map, review filters, `#review-{id}` anchor
 - [x] `/booking/confirm` — mock reservation flow
 - [x] Listing cards → property detail links
 - [x] **BigInt ID fix** — listing/review IDs serialized as JSON strings (JS safe integer)
+- [x] **Wishlist** — `localStorage` + `/wishlist` page; ♡ on listing cards
+- [x] **Compare** — checkbox select 2–4 stays; `POST /api/batch/compare` + `/compare` matrix + AI verdict
+- [x] **Concierge → list/map sync** — `listings_loaded` SSE updates main results + banner
 
 ---
 
@@ -139,10 +142,7 @@ print(f\"{'TOTAL':<12} {sum(x[1] for x in rows):>12,} {sum(x[2] for x in rows):>
 - [ ] **5-min Loom** — filter search, NL search, complex concierge query, one failure case
 
 ### Phase 4 — remaining (if time before submit)
-- [ ] Compare matrix UI + `/api/batch/compare`
-- [ ] Wishlist (localStorage)
-- [ ] Concierge results → sync to main list/map (optional polish)
-- [ ] UI polish (Booking-style density)
+- [ ] UI polish (Booking-style density, guest selector, property type filter)
 
 ### Deferred / document as trade-off
 - [ ] Redis caching for search/summaries
@@ -655,6 +655,12 @@ python scripts/ingest.py --city barcelona --limit 10 --skip-embeddings
 ---
 
 ## Changelog
+
+### 2026-06-28 (assignment alignment: compare, wishlist, concierge sync)
+- **`POST /api/batch/compare`** — 2–4 listings, side-by-side matrix + LLM verdict
+- **`GET /api/listings/by-ids`** — hydrate concierge hits on main list/map
+- **`/compare`**, **`/wishlist`** pages; ♡ save + compare checkboxes on cards
+- Concierge `listings_loaded` → sync search results + rose banner
 
 ### 2026-06-28 (concierge pipeline loading UX)
 - `AgentPipeline` stepper + in-chat loading status with “Up next”; auto-scroll in concierge

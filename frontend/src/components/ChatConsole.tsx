@@ -25,7 +25,16 @@ function isReviewSummaryMessage(text: string) {
   return text.includes("Review insights");
 }
 
-export default function ChatConsole() {
+interface ConciergeListingHit {
+  id: string;
+  city: string;
+}
+
+interface ChatConsoleProps {
+  onListingsLoaded?: (listings: ConciergeListingHit[]) => void;
+}
+
+export default function ChatConsole({ onListingsLoaded }: ChatConsoleProps) {
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -56,6 +65,13 @@ export default function ChatConsole() {
   const handleEvent = (event: SSEPayload) => {
     if (event.event === "trace_init" && event.request_id) {
       setRequestId(event.request_id);
+      return;
+    }
+
+    if (event.event === "listings_loaded" && event.listings?.length && onListingsLoaded) {
+      onListingsLoaded(
+        event.listings.map((l) => ({ id: l.id, city: l.city })),
+      );
       return;
     }
 

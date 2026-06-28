@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import FilterBar from "@/components/FilterBar";
@@ -9,9 +10,11 @@ import NaturalLanguageBar from "@/components/NaturalLanguageBar";
 import ChatConsole from "@/components/ChatConsole";
 import {
   fetchListings,
+  fetchListingsByIds,
   ListingCard,
   SearchFilters,
 } from "@/lib/api";
+import { getWishlist, toggleWishlist } from "@/lib/wishlist";
 
 const DEFAULT_FILTERS: SearchFilters = {
   city: "lisbon",
@@ -19,6 +22,8 @@ const DEFAULT_FILTERS: SearchFilters = {
   limit: 20,
   offset: 0,
 };
+
+const MAX_COMPARE = 4;
 
 export default function SearchPage() {
   const [filters, setFilters] = useState<SearchFilters>(DEFAULT_FILTERS);
@@ -29,11 +34,19 @@ export default function SearchPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const [compareIds, setCompareIds] = useState<Set<string>>(new Set());
+  const [wishlistIds, setWishlistIds] = useState<Set<string>>(new Set());
+  const [conciergeBanner, setConciergeBanner] = useState<string | null>(null);
   const nlAbortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    setWishlistIds(new Set(getWishlist().map((x) => x.id)));
+  }, []);
 
   const handleNlFilters = useCallback((parsed: Partial<SearchFilters>) => {
     nlAbortRef.current?.abort();
     setUseMapBounds(false);
+    setConciergeBanner(null);
     setFilters({
       sort: "rating_desc",
       limit: 20,
@@ -79,11 +92,70 @@ export default function SearchPage() {
     }
   }, [useMapBounds]);
 
+  const handleToggleCompare = useCallback((item: ListingCard) => {
+    setCompareIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(item.id)) {
+        next.delete(item.id);
+      } else if (next.size < MAX_COMPARE) {
+        next.add(item.id);
+      }
+      return next;
+    });
+  }, []);
+
+  const handleToggleWishlist = useCallback((item: ListingCard) => {
+    const next = toggleWishlist(item);
+    setWishlistIds(new Set(next.map((x) => x.id)));
+  }, []);
+
+  const handleConciergeListings = useCallback(
+    async (hits: Array<{ id: string; city: string }>) => {
+      if (!hits.length) return;
+      const ids = hits.map((h) => h.id);
+      try {
+        const data = await fetchListingsByIds(ids);
+        setItems(data.items);
+        setTotal(data.items.length);
+        setUseMapBounds(false);
+        setFilters((prev) => ({
+          ...prev,
+          city: hits[0]?.city ?? prev.city,
+          offset: 0,
+        }));
+        setConciergeBanner(`Showing ${data.items.length} stays from concierge on map & list`);
+      } catch {
+        setConciergeBanner(null);
+      }
+    },
+    [],
+  );
+
+  const compareHref =
+    compareIds.size >= 2 ? `/compare?ids=${Array.from(compareIds).join(",")}` : null;
+
   return (
     <div className="flex h-screen flex-col bg-zinc-50">
       <header className="border-b border-zinc-200 bg-white px-4 py-3">
-        <h1 className="text-lg font-semibold text-zinc-900">Travel AI Search</h1>
-        <p className="text-sm text-zinc-500">Filter stays and explore on the map</p>
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <h1 className="text-lg font-semibold text-zinc-900">Travel AI Search</h1>
+            <p className="text-sm text-zinc-500">Filter stays and explore on the map</p>
+          </div>
+          <div className="flex items-center gap-3 text-sm">
+            <Link href="/wishlist" className="text-zinc-600 hover:text-rose-600">
+              Saved ({wishlistIds.size})
+            </Link>
+            {compareHref && (
+              <Link
+                href={compareHref}
+                className="rounded-full bg-rose-600 px-3 py-1 text-xs font-medium text-white hover:bg-rose-700"
+              >
+                Compare {compareIds.size}
+              </Link>
+            )}
+          </div>
+        </div>
       </header>
 
       <NaturalLanguageBar
@@ -95,9 +167,25 @@ export default function SearchPage() {
         filters={filters}
         useMapBounds={useMapBounds}
         onUseMapBoundsChange={setUseMapBounds}
-        onChange={setFilters}
+        onChange={(next) => {
+          setConciergeBanner(null);
+          setFilters(next);
+        }}
         loading={loading}
       />
+
+      {conciergeBanner && (
+        <div className="border-b border-rose-100 bg-rose-50 px-4 py-2 text-sm text-rose-800">
+          {conciergeBanner}
+          <button
+            type="button"
+            onClick={() => setConciergeBanner(null)}
+            className="ml-3 text-xs text-rose-600 underline"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
 
       {error && (
         <div className="border-b border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
@@ -115,6 +203,10 @@ export default function SearchPage() {
             hoveredId={hoveredId}
             onHover={setHoveredId}
             onPage={(offset) => setFilters((prev) => ({ ...prev, offset }))}
+            compareIds={compareIds}
+            onToggleCompare={handleToggleCompare}
+            wishlistIds={wishlistIds}
+            onToggleWishlist={handleToggleWishlist}
           />
         </div>
         <div className="min-h-[320px] lg:min-h-0">
@@ -127,7 +219,7 @@ export default function SearchPage() {
         </div>
       </div>
 
-      <ChatConsole />
+      <ChatConsole onListingsLoaded={handleConciergeListings} />
     </div>
   );
 }

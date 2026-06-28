@@ -16,7 +16,15 @@ export interface SSEPayload {
   node?: string;
   token?: string;
   filters?: Record<string, unknown>;
-  listings?: unknown[];
+  listings?: Array<{
+    id: string;
+    name?: string | null;
+    city: string;
+    price: number;
+    rating?: number | null;
+    reviews: number;
+    rationale?: string;
+  }>;
   citations?: Array<{ review_id: string; listing_id: string; quote: string; listing_name?: string }>;
   text?: string;
   latency_ms?: number;

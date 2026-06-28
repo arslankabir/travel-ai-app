@@ -187,6 +187,27 @@ def search_listings(
     )
 
 
+@router.get("/by-ids", response_model=ListingsResponse)
+def get_listings_by_ids(
+    ids: str = Query(..., description="Comma-separated listing IDs"),
+    db: Session = Depends(get_db),
+) -> ListingsResponse:
+    try:
+        id_list = [int(x.strip()) for x in ids.split(",") if x.strip()]
+    except ValueError as exc:
+        raise HTTPException(400, "ids must be comma-separated integers") from exc
+    if not id_list or len(id_list) > 20:
+        raise HTTPException(400, "Provide 1–20 listing IDs")
+
+    rows = db.execute(
+        text(f"SELECT {SELECT_COLS} FROM listings l WHERE l.id = ANY(:ids)"),
+        {"ids": id_list},
+    ).fetchall()
+    by_id = {int(r.id): _row_to_card(r) for r in rows}
+    items = [by_id[i] for i in id_list if i in by_id]
+    return ListingsResponse(total=len(items), limit=len(items), offset=0, items=items)
+
+
 @router.get("/{listing_id}/detail", response_model=ListingDetail)
 def get_listing_detail(listing_id: int, db: Session = Depends(get_db)) -> ListingDetail:
     row = db.execute(
