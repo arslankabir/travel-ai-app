@@ -142,7 +142,8 @@ print(f\"{'TOTAL':<12} {sum(x[1] for x in rows):>12,} {sum(x[2] for x in rows):>
 - [x] **`EVAL.md`** — golden queries + rubric + manual scores
 - [x] **`DEPLOY.md`** + root `Dockerfile` + `railway.toml` for Railway
 - [x] **`scripts/run-local.sh`** — docker compose bootstrap
-- [ ] **Deploy** — Railway (API) + Vercel (frontend) + Supabase DB slice → live URL
+- [x] **Supabase DB slice** — schema + ingest (11,850 listings, 56,007 reviews) — see [deploy-progress.md](./deploy-progress.md)
+- [ ] **Deploy** — Railway (API) + Vercel (frontend) → live URL
 - [ ] **Live deploy smoke test** — filter, NL, concierge, failure case on production URL
 
 ### Phase 4 — remaining (if time before submit)
@@ -658,6 +659,11 @@ python scripts/ingest.py --city barcelona --limit 10 --skip-embeddings
 ---
 
 ## Changelog
+
+### 2026-06-28 (Supabase deploy slice ingested)
+- Supabase schema live; smoke + full slice via `scripts/ingest-deploy-slice.sh`
+- **11,850 listings** (Lisbon 8,450 + Barcelona 3,400), **56,007 reviews**, all with **512-dim embeddings**
+- [deploy-progress.md](./deploy-progress.md) — checklist, ingest logs, Railway/Vercel next steps
 
 ### 2026-06-28 (backend platform alignment: cache, batch summarize, trace)
 - **`app/cache.py`** — Redis + in-memory TTL fallback

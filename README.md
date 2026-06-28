@@ -134,7 +134,8 @@ API docs: http://localhost:8000/docs
 
 ## Deploy
 
-See **[DEPLOY.md](./DEPLOY.md)** — Railway (API) + Vercel (frontend) + Supabase (Postgres/pgvector).
+See **[DEPLOY.md](./DEPLOY.md)** — Railway (API) + Vercel (frontend) + Supabase (Postgres/pgvector).  
+Deploy checklist and ingest logs: **[proj-docs/deploy-progress.md](./proj-docs/deploy-progress.md)**.
 
 ---
 

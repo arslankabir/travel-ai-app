@@ -11,10 +11,19 @@ Deploy the **API on Railway**, **frontend on Vercel**, and **Postgres on Supabas
    CREATE EXTENSION IF NOT EXISTS vector;
    ```
 3. Run `init-extensions.sql` from the repo (tables + indexes).
-4. Load a **slice** (~10–15K listings) from local DB or re-run ingest with `--limit` against Supabase `DATABASE_URL`.
+4. Load a **slice** (~10–15K listings). From repo root:
+   ```bash
+   export SUPABASE_DATABASE_URL='postgresql://postgres:YOUR_PASSWORD@db.unrkkzzmeumoogivclpv.supabase.co:5432/postgres'
+   export OPENAI_API_KEY='sk-...'   # from .env
+   chmod +x scripts/ingest-deploy-slice.sh
+   ./scripts/ingest-deploy-slice.sh smoke   # quick test (200 rows)
+   ./scripts/ingest-deploy-slice.sh         # full deploy slice
+   ```
 5. Copy connection string → `DATABASE_URL` for Railway.
 
 **Note:** Full 50K + embeddings may exceed free tier; a Lisbon+Barcelona slice is enough for demo.
+
+**Progress log:** [proj-docs/deploy-progress.md](./proj-docs/deploy-progress.md)
 
 ## 2. Backend (Railway)
 
