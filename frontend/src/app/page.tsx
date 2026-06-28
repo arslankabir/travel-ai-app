@@ -23,7 +23,7 @@ const DEFAULT_FILTERS: SearchFilters = {
   offset: 0,
 };
 
-const MAX_COMPARE = 4;
+const MAX_COMPARE = 5;
 
 export default function SearchPage() {
   const [filters, setFilters] = useState<SearchFilters>(DEFAULT_FILTERS);

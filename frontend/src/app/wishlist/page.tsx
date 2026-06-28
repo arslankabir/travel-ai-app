@@ -35,7 +35,7 @@ export default function WishlistPage() {
     setSelected((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
-      else if (next.size < 4) next.add(id);
+      else if (next.size < 5) next.add(id);
       return next;
     });
   }
@@ -56,7 +56,7 @@ export default function WishlistPage() {
               Compare ({selected.size})
             </Link>
           ) : (
-            <span className="text-xs text-zinc-400">Select 2–4 to compare</span>
+            <span className="text-xs text-zinc-400">Select 2–5 to compare</span>
           )}
         </div>
       </header>

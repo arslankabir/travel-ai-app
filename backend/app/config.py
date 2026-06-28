@@ -8,6 +8,7 @@ ROOT = Path(__file__).resolve().parents[2]
 class Settings(BaseSettings):
     database_url: str = "postgresql://postgres:postgrespassword@localhost:5432/travel_db"
     cors_origins: str = "http://localhost:3000"
+    redis_url: str = ""
     api_prefix: str = "/api"
     vector_dimension: int = 512
 
@@ -20,7 +21,10 @@ class Settings(BaseSettings):
     llm_model_review: str = "qwen2.5:3b"
     llm_model_itinerary: str = "llama3.1:8b"
 
-    model_config = SettingsConfigDict(env_file=ROOT / ".env", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=ROOT / ".env" if (ROOT / ".env").is_file() else None,
+        extra="ignore",
+    )
 
     @property
     def sqlalchemy_url(self) -> str:

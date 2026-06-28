@@ -61,7 +61,7 @@ print(f\"{'TOTAL':<12} {sum(x[1] for x in rows):>12,} {sum(x[2] for x in rows):>
 | **2** Core Search & Map | 8–18 | ✅ Done | FastAPI listings + Next.js map UI |
 | **3** AI Layer | 18–32 | ✅ Done | LangGraph, hybrid SSE, NL search, concierge, trace, golden-query fixes |
 | **4** Detail, Compare, Polish | 32–40 | ✅ Done | Detail, booking, wishlist, compare, concierge→map sync |
-| **5** Deploy, Eval, Loom | 40–48 | 🟡 In progress | README polish, live URL, `EVAL.md`, 5-min video ⬜ |
+| **5** Deploy, Eval, Loom | 40–48 | 🟡 In progress | README, EVAL.md, DEPLOY.md ✅; live URL + Loom ⬜ |
 
 ---
 
@@ -128,7 +128,9 @@ print(f\"{'TOTAL':<12} {sum(x[1] for x in rows):>12,} {sum(x[2] for x in rows):>
 - [x] Listing cards → property detail links
 - [x] **BigInt ID fix** — listing/review IDs serialized as JSON strings (JS safe integer)
 - [x] **Wishlist** — `localStorage` + `/wishlist` page; ♡ on listing cards
-- [x] **Compare** — checkbox select 2–4 stays; `POST /api/batch/compare` + `/compare` matrix + AI verdict
+- [x] **Batch** — `POST /api/batch/compare` (2–5), `POST /api/batch/summarize` (20 parallel via `asyncio.gather`)
+- [x] **Cache** — Redis + in-memory fallback: retrieval 5m, review/compare 1h, per-listing summary 24h
+- [x] **Trace** — batch routes write to `TraceStore`; chat trace unchanged
 - [x] **Concierge → list/map sync** — `listings_loaded` SSE updates main results + banner
 
 ---
@@ -136,16 +138,18 @@ print(f\"{'TOTAL':<12} {sum(x[1] for x in rows):>12,} {sum(x[2] for x in rows):>
 ## In progress / next up
 
 ### Phase 5 — submission (current)
-- [ ] **Deploy** — Railway (API + DB) + Vercel (frontend); live URL
-- [ ] **README** — one-command run, Mermaid diagram, trade-offs, cost/query estimate
-- [ ] **`EVAL.md`** — golden queries + manual scoring
-- [ ] **5-min Loom** — filter search, NL search, complex concierge query, one failure case
+- [x] **README** — one-command run, Mermaid, data choice, trade-offs, cost/query, Loom script
+- [x] **`EVAL.md`** — golden queries + rubric + manual scores
+- [x] **`DEPLOY.md`** + root `Dockerfile` + `railway.toml` for Railway
+- [x] **`scripts/run-local.sh`** — docker compose bootstrap
+- [ ] **Deploy** — Railway (API) + Vercel (frontend) + Supabase DB slice → live URL
+- [ ] **5-min Loom** — filter, NL, concierge, failure case
 
 ### Phase 4 — remaining (if time before submit)
 - [ ] UI polish (Booking-style density, guest selector, property type filter)
 
 ### Deferred / document as trade-off
-- [ ] Redis caching for search/summaries
+- [ ] Wire listing **search** HTTP endpoint cache (retrieval + batch paths cached)
 - [ ] `export_deploy.py` (Supabase slice), `enrich_reviews.py`
 - [ ] Hybrid query < 50ms benchmark
 - [ ] Document ingest slice strategy in README (raw vs validated, review caps, madrid `--limit`)
@@ -655,6 +659,17 @@ python scripts/ingest.py --city barcelona --limit 10 --skip-embeddings
 ---
 
 ## Changelog
+
+### 2026-06-28 (backend assignment alignment: cache, batch summarize, trace)
+- **`app/cache.py`** — Redis + in-memory TTL fallback
+- Cache retrieval (5m), review synthesis (1h), compare (1h), per-listing summary (24h)
+- **`POST /api/batch/summarize`** — up to 20 listings via `asyncio.gather`
+- Compare extended to **5** listings; batch routes emit **`request_id`** → `/api/trace/{id}`
+
+### 2026-06-28 (Phase 5 submission docs)
+- README rewrite: architecture Mermaid, trade-offs, cost estimate, Loom script
+- EVAL.md golden queries G1–G6 with rubric
+- DEPLOY.md + Dockerfile + railway.toml + scripts/run-local.sh
 
 ### 2026-06-28 (assignment alignment: compare, wishlist, concierge sync)
 - **`POST /api/batch/compare`** — 2–4 listings, side-by-side matrix + LLM verdict

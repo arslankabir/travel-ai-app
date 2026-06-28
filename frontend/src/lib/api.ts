@@ -157,8 +157,23 @@ export interface CompareListingItem {
 }
 
 export interface CompareResponse {
+  request_id: string;
   listings: CompareListingItem[];
   verdict: string;
+  cached?: boolean;
+}
+
+export interface SummarizeItem {
+  listing_id: string;
+  name: string | null;
+  summary: string;
+  cached?: boolean;
+}
+
+export interface SummarizeResponse {
+  request_id: string;
+  items: SummarizeItem[];
+  cached_count: number;
 }
 
 export async function fetchCompare(listingIds: string[]): Promise<CompareResponse> {
@@ -172,6 +187,19 @@ export async function fetchCompare(listingIds: string[]): Promise<CompareRespons
   });
   if (!res.ok) {
     throw new Error(`Compare failed (${res.status})`);
+  }
+  return res.json();
+}
+
+export async function fetchBatchSummarize(listingIds: string[]): Promise<SummarizeResponse> {
+  const res = await fetch(`${API_BASE}/api/batch/summarize`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ listing_ids: listingIds }),
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    throw new Error(`Summarize failed (${res.status})`);
   }
   return res.json();
 }

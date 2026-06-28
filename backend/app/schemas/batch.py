@@ -4,7 +4,7 @@ from app.schemas.common import BigIntId
 
 
 class CompareRequest(BaseModel):
-    listing_ids: list[str] = Field(..., min_length=2, max_length=4)
+    listing_ids: list[str] = Field(..., min_length=2, max_length=5)
 
 
 class CompareListingItem(BaseModel):
@@ -21,5 +21,24 @@ class CompareListingItem(BaseModel):
 
 
 class CompareResponse(BaseModel):
+    request_id: str
     listings: list[CompareListingItem]
     verdict: str
+    cached: bool = False
+
+
+class SummarizeRequest(BaseModel):
+    listing_ids: list[str] = Field(..., min_length=1, max_length=20)
+
+
+class SummarizeItem(BaseModel):
+    listing_id: BigIntId
+    name: str | None
+    summary: str
+    cached: bool = False
+
+
+class SummarizeResponse(BaseModel):
+    request_id: str
+    items: list[SummarizeItem]
+    cached_count: int = 0

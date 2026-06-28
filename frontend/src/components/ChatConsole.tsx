@@ -25,6 +25,17 @@ function isReviewSummaryMessage(text: string) {
   return text.includes("Review insights");
 }
 
+function formatLatency(ms: number) {
+  if (ms < 1000) return `${ms} ms`;
+  return `${(ms / 1000).toFixed(1)} s`;
+}
+
+interface RunMetrics {
+  latencyMs: number;
+  requestId: string;
+  tokenTotal: number | null;
+}
+
 interface ConciergeListingHit {
   id: string;
   city: string;
@@ -43,6 +54,7 @@ export default function ChatConsole({ onListingsLoaded }: ChatConsoleProps) {
   const [awaitingReview, setAwaitingReview] = useState(false);
   const [afterListings, setAfterListings] = useState(false);
   const [requestId, setRequestId] = useState<string | null>(null);
+  const [runMetrics, setRunMetrics] = useState<RunMetrics | null>(null);
   const [citations, setCitations] = useState<
     Array<{ review_id: string; listing_id: string; quote: string; listing_name?: string }>
   >([]);
@@ -55,7 +67,24 @@ export default function ChatConsole({ onListingsLoaded }: ChatConsoleProps) {
       top: scrollRef.current.scrollHeight,
       behavior: "smooth",
     });
-  }, [messages, citations, pipelineSteps, streaming, awaitingReview, afterListings]);
+  }, [messages, citations, pipelineSteps, streaming, awaitingReview, afterListings, runMetrics]);
+
+  const loadTraceDetails = async (rid: string) => {
+    try {
+      const trace = await fetchTrace(rid);
+      setRunMetrics((prev) =>
+        prev && prev.requestId === rid
+          ? {
+              ...prev,
+              tokenTotal:
+                trace.token_usage?.total > 0 ? trace.token_usage.total : null,
+            }
+          : prev,
+      );
+    } catch {
+      // ignore
+    }
+  };
 
   const finishReviewPhase = () => {
     setAwaitingReview(false);
@@ -128,6 +157,11 @@ export default function ChatConsole({ onListingsLoaded }: ChatConsoleProps) {
     if (event.event === "complete") {
       setPipelineSteps((prev) => markPipelineComplete(prev));
       finishReviewPhase();
+      const rid = event.request_id ?? requestId;
+      if (event.latency_ms != null && rid) {
+        setRunMetrics({ latencyMs: event.latency_ms, requestId: rid, tokenTotal: null });
+        void loadTraceDetails(rid);
+      }
       return;
     }
 
@@ -146,6 +180,7 @@ export default function ChatConsole({ onListingsLoaded }: ChatConsoleProps) {
     setInput("");
     setPipelineSteps(initPipeline());
     setCitations([]);
+    setRunMetrics(null);
     setAwaitingReview(false);
     setAfterListings(false);
     streamBuffer.current = "";
@@ -168,15 +203,16 @@ export default function ChatConsole({ onListingsLoaded }: ChatConsoleProps) {
     }
   };
 
-  const loadTrace = async () => {
-    if (!requestId) return;
+  const openTraceJson = async () => {
+    const rid = runMetrics?.requestId ?? requestId;
+    if (!rid) return;
     try {
-      const trace = await fetchTrace(requestId);
+      const trace = await fetchTrace(rid);
       setMessages((prev) => [
         ...prev,
         {
           role: "assistant",
-          content: `Trace: ${trace.total_latency_ms}ms, tokens: ${JSON.stringify(trace.token_usage)}`,
+          content: `Trace (${rid.slice(0, 8)}…): ${JSON.stringify(trace, null, 2)}`,
         },
       ]);
     } catch {
@@ -245,6 +281,26 @@ export default function ChatConsole({ onListingsLoaded }: ChatConsoleProps) {
                 </ul>
               </div>
             )}
+            {runMetrics && !streaming && (
+              <div className="mr-6 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-zinc-100 bg-zinc-50 px-3 py-2 text-[11px] text-zinc-500">
+                <span>
+                  Completed in{" "}
+                  <span className="font-medium text-zinc-700">
+                    {formatLatency(runMetrics.latencyMs)}
+                  </span>
+                </span>
+                {runMetrics.tokenTotal != null && runMetrics.tokenTotal > 0 && (
+                  <span>· {runMetrics.tokenTotal.toLocaleString()} tokens</span>
+                )}
+                <button
+                  type="button"
+                  onClick={openTraceJson}
+                  className="text-rose-600 underline hover:text-rose-800"
+                >
+                  View trace
+                </button>
+              </div>
+            )}
           </div>
 
           <div className="border-t border-zinc-200 p-3">
@@ -266,15 +322,6 @@ export default function ChatConsole({ onListingsLoaded }: ChatConsoleProps) {
                 {streaming ? "…" : "Send"}
               </button>
             </div>
-            {requestId && (
-              <button
-                type="button"
-                onClick={loadTrace}
-                className="mt-2 text-[10px] text-zinc-400 underline"
-              >
-                View trace ({requestId.slice(0, 8)}…)
-              </button>
-            )}
           </div>
         </div>
       )}

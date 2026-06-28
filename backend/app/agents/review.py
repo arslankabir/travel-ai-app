@@ -7,6 +7,7 @@ from sqlalchemy import text
 
 from app.agents.factory import ModelFactory
 from app.agents.state import Citation, GraphState
+from app.cache import cache, hash_payload
 from app.db.connection import SessionLocal
 
 
@@ -25,6 +26,8 @@ REVIEW_SYSTEM = """You synthesize guest review insights for travel listings.
 Only cite reviews provided in the context. Each citation must use an exact review_id from context.
 Include 2-5 citations when reviews are available. Each quote must be a short excerpt from that review.
 Keep summary concise (3-5 sentences). Compare consistency and recurring themes when multiple listings."""
+
+REVIEW_CACHE_TTL = 3600
 
 
 def _review_lookup(rows) -> tuple[set[int], dict[int, int]]:
@@ -107,6 +110,14 @@ async def review_agent(state: GraphState) -> dict:
         return {"review_summary": None, "citations": []}
 
     listing_ids = [h["id"] for h in listings[:5]]
+    cache_key = f"review:{hash_payload({'ids': sorted(listing_ids), 'q': state.get('user_input', '')})}"
+    cached = cache.get(cache_key)
+    if cached:
+        return {
+            "review_summary": cached["review_summary"],
+            "citations": cached["citations"],
+        }
+
     db = SessionLocal()
     try:
         rows = db.execute(
@@ -169,4 +180,6 @@ async def review_agent(state: GraphState) -> dict:
         citations = _fallback_citations(rows, listing_ids)
 
     citations = _attach_listing_names(citations, listings)
-    return {"review_summary": summary, "citations": citations}
+    result = {"review_summary": summary, "citations": citations}
+    cache.set(cache_key, result, REVIEW_CACHE_TTL)
+    return result

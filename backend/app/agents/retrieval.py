@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.agents.factory import ModelFactory
 from app.agents.state import GraphState, ListingHit, ParsedFilters
+from app.cache import cache, hash_payload
 from app.db.connection import SessionLocal
 
 SELECT_COLS = """
@@ -195,10 +196,17 @@ async def retrieval_agent(state: GraphState) -> dict:
     filters = dict(state.get("parsed_filters") or {})
     query_text = filters.get("query_text") or state.get("user_input", "")
 
+    cache_key = f"retrieval:{hash_payload({'filters': filters, 'q': query_text})}"
+    cached = cache.get(cache_key)
+    if cached:
+        return cached
+
     listings, note = _search_with_fallback(filters, query_text)
     summary = _format_summary(listings, note)
 
-    return {
+    result = {
         "listings": listings,
         "response_text": summary,
     }
+    cache.set(cache_key, result, 300)
+    return result
