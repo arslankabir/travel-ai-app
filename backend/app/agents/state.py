@@ -3,7 +3,7 @@ from typing import Annotated, Literal, TypedDict
 from langgraph.graph.message import add_messages
 
 
-IntentType = Literal["search_only", "review_compare", "itinerary_plan"]
+IntentType = Literal["search_only", "review_compare", "itinerary_plan", "chitchat"]
 ChatMode = Literal["search", "concierge"]
 
 

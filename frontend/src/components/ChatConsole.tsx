@@ -25,9 +25,11 @@ export default function ChatConsole() {
   const handleEvent = (event: SSEPayload) => {
     if (event.event === "trace_init" && event.request_id) {
       setRequestId(event.request_id);
+      return;
     }
     if (event.event === "node_start" && event.node) {
       setSteps((prev) => [...prev, event.node!]);
+      return;
     }
     if (event.event === "token" && event.token) {
       streamBuffer.current += event.token;
@@ -41,15 +43,12 @@ export default function ChatConsole() {
         }
         return copy;
       });
+      return;
     }
     if (event.event === "message" && event.text) {
-      streamBuffer.current = event.text;
-      setMessages((prev) => {
-        const withoutEmptyAssistant = prev.filter(
-          (m, i) => !(i === prev.length - 1 && m.role === "assistant" && !m.content),
-        );
-        return [...withoutEmptyAssistant, { role: "assistant", content: event.text! }];
-      });
+      streamBuffer.current = "";
+      setMessages((prev) => [...prev, { role: "assistant", content: event.text! }]);
+      return;
     }
     if (event.event === "itinerary" && event.text) {
       setMessages((prev) => [...prev, { role: "assistant", content: event.text! }]);

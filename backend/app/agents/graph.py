@@ -10,6 +10,8 @@ from app.agents.state import GraphState, IntentType
 def route_after_intent(state: GraphState) -> str:
     if state.get("mode") == "search":
         return END
+    if state.get("intent_type") == "chitchat":
+        return END
     intent: IntentType | None = state.get("intent_type")
     if intent == "search_only":
         return "retrieval_agent"

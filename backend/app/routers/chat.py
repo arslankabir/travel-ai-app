@@ -53,6 +53,10 @@ async def stream_chat(req: ChatRequest) -> StreamingResponse:
                         yield _sse({"event": "node_start", "node": node})
 
                 elif kind == "on_chat_model_stream":
+                    node = event.get("metadata", {}).get("langgraph_node")
+                    # Intent/review use structured JSON — don't leak raw tokens to UI
+                    if node not in ("itinerary_agent",):
+                        continue
                     chunk = event.get("data", {}).get("chunk")
                     content = getattr(chunk, "content", None) if chunk else None
                     if content:
@@ -77,11 +81,14 @@ async def stream_chat(req: ChatRequest) -> StreamingResponse:
                         trace.finish_step(node, results_count=results_count)
 
                     if node == "intent_agent" and isinstance(output_data, dict):
-                        if output_data.get("parsed_filters"):
+                        mode = initial_state.get("mode")
+                        if mode == "search" and output_data.get("parsed_filters"):
                             yield _sse({
                                 "event": "filters_parsed",
                                 "filters": output_data["parsed_filters"],
                             })
+                        elif output_data.get("intent_type") == "chitchat" and output_data.get("response_text"):
+                            yield _sse({"event": "message", "text": output_data["response_text"]})
 
                     if node == "retrieval_agent" and isinstance(output_data, dict):
                         if output_data.get("listings"):

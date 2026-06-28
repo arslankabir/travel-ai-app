@@ -48,6 +48,29 @@ def _repair_json(text: str) -> dict:
     return json.loads(match.group())
 
 
+CHITCHAT_RE = re.compile(r"^(hi|hello|hey|thanks|thank you|yo|sup|howdy)[\s!.?]*$", re.I)
+
+CONCIERGE_GREETING = (
+    "Hello! I can help you find stays, compare guest reviews, or plan a multi-day trip. "
+    "Try: \"Find a quiet 1-bed in Lisbon under €130 with good reviews.\""
+)
+
+
+def _is_chitchat(user_input: str) -> bool:
+    text = user_input.strip()
+    if len(text) < 4:
+        return True
+    return bool(CHITCHAT_RE.match(text))
+
+
+def _has_actionable_filters(filters: ParsedFilters) -> bool:
+    actionable_keys = (
+        "city", "check_in", "check_out", "min_price", "max_price",
+        "min_rating", "accommodates", "bedrooms", "amenity",
+    )
+    return any(filters.get(k) not in (None, "") for k in actionable_keys)
+
+
 def _heuristic_intent(user_input: str) -> IntentOutput:
     lower = user_input.lower()
     city = next((c for c in CITIES if c in lower), None)
@@ -99,6 +122,15 @@ def _to_parsed_filters(data: IntentOutput) -> ParsedFilters:
 
 
 async def intent_agent(state: GraphState) -> dict:
+    user_input = state["user_input"]
+
+    if state.get("mode") == "concierge" and _is_chitchat(user_input):
+        return {
+            "intent_type": "chitchat",
+            "parsed_filters": None,
+            "response_text": CONCIERGE_GREETING,
+        }
+
     llm = ModelFactory.get_llm("intent")
     structured = llm.with_structured_output(IntentOutput)
 
@@ -115,13 +147,19 @@ async def intent_agent(state: GraphState) -> dict:
             content = raw.content if isinstance(raw.content, str) else str(raw.content)
             result = IntentOutput.model_validate(_repair_json(content))
         except Exception:
-            result = _heuristic_intent(state["user_input"])
+            result = _heuristic_intent(user_input)
 
     filters = _to_parsed_filters(result)
     intent_type: IntentType = result.intent_type
 
     if state["mode"] == "search":
         intent_type = "search_only"
+        if not _has_actionable_filters(filters):
+            return {
+                "intent_type": "search_only",
+                "parsed_filters": filters,
+                "response_text": "",
+            }
 
     return {
         "intent_type": intent_type,

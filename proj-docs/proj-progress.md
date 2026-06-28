@@ -119,6 +119,8 @@ print(f\"{'TOTAL':<12} {sum(x[1] for x in rows):>12,} {sum(x[2] for x in rows):>
 - [x] Heuristic intent fallback when Ollama offline (NL search still works)
 - [x] **Ollama Option A verified** (2026-06-28) — models pulled; intent agent + SSE working; see [log](#2026-06-28--ollama-setup--phase-3-smoke)
 - [x] `ModelFactory` reads LLM + embedding keys from pydantic `Settings` (fixes `OPENAI_API_KEY` not visible to retrieval)
+- [x] **Phase 3 UX fixes** (2026-06-28) — chitchat guard, NL filter merge, hide JSON tokens in concierge; see [log](#2026-06-28--phase-3-ux-fixes)
+- [ ] Concierge results → sync to main list/map (optional polish)
 - [ ] Batch compare endpoint (`/api/batch/compare`) — Phase 4 overlap
 - [ ] Redis caching for search/summaries — Phase 4 overlap
 
@@ -150,6 +152,33 @@ curl -s -N -X POST http://127.0.0.1:8000/api/chat/stream \
 # → filters_parsed with city=lisbon, max_price=130, bedrooms=1
 npm run build  # frontend — pass
 ```
+
+---
+
+### 2026-06-28 — Phase 3 UX fixes
+
+**Why:** Manual UI testing found concierge leaking raw intent JSON on "hi", random cross-city retrieval for greetings, and NL search bar not updating listings/filter chips.
+
+**Fixes:**
+| Issue | Fix |
+| :--- | :--- |
+| Concierge "hi" → raw JSON + 8 random listings | `chitchat` intent type; skip retrieval; friendly greeting message |
+| JSON visible in chat bubble | SSE only streams tokens from `itinerary_agent`; intent/review structured output hidden |
+| NL search chips empty / listings unchanged | Merge only parsed non-null filters (preserve existing city); readable chip labels; hint when nothing extractable |
+
+**Verify:**
+```bash
+# NL search bar → chips + listing refresh
+# Query: quiet 1-bed in Lisbon under €130
+
+# Concierge → greeting only
+curl -s -N -X POST http://localhost:8000/api/chat/stream \
+  -H 'Content-Type: application/json' \
+  -d '{"user_input":"hi","mode":"concierge"}'
+# → message event with greeting, no retrieval dump
+```
+
+**Known limitation:** NL search updates traditional SQL filters only (city, price, beds, etc.) — not pure vibe/semantic queries on the main list yet.
 
 ---
 
@@ -602,6 +631,9 @@ python scripts/ingest.py --city barcelona --limit 10 --skip-embeddings
 ---
 
 ## Changelog
+
+### 2026-06-28 (Phase 3 UX fixes)
+- Concierge chitchat guard; suppress intent JSON in SSE; NL search filter merge + chips
 
 ### 2026-06-28 (Ollama setup + Settings fix)
 - Ollama models pulled; Phase 3 smoke logged; `ModelFactory` uses pydantic Settings for API keys

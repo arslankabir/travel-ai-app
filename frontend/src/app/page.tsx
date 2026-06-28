@@ -67,7 +67,9 @@ export default function SearchPage() {
       </header>
 
       <NaturalLanguageBar
-        onFiltersParsed={(parsed) => setFilters((prev) => ({ ...prev, ...parsed, offset: 0 }))}
+        onFiltersParsed={(parsed) =>
+          setFilters((prev) => ({ ...prev, ...parsed, offset: 0 }))
+        }
       />
 
       <FilterBar

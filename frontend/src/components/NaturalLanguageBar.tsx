@@ -6,24 +6,49 @@ import { SearchFilters } from "@/lib/api";
 import { streamChat } from "@/lib/sse";
 
 interface NaturalLanguageBarProps {
-  onFiltersParsed: (filters: SearchFilters) => void;
+  onFiltersParsed: (filters: Partial<SearchFilters>) => void;
 }
 
-function mapParsedToFilters(raw: Record<string, unknown>): SearchFilters {
-  return {
-    city: typeof raw.city === "string" ? raw.city : undefined,
-    check_in: typeof raw.check_in === "string" ? raw.check_in : undefined,
-    check_out: typeof raw.check_out === "string" ? raw.check_out : undefined,
-    min_price: typeof raw.min_price === "number" ? raw.min_price : undefined,
-    max_price: typeof raw.max_price === "number" ? raw.max_price : undefined,
-    min_rating: typeof raw.min_rating === "number" ? raw.min_rating : undefined,
-    accommodates: typeof raw.accommodates === "number" ? raw.accommodates : undefined,
-    bedrooms: typeof raw.bedrooms === "number" ? raw.bedrooms : undefined,
-    amenity: typeof raw.amenity === "string" ? raw.amenity : undefined,
-    sort: "rating_desc",
-    limit: 20,
-    offset: 0,
-  };
+const FILTER_KEYS = [
+  "city",
+  "check_in",
+  "check_out",
+  "min_price",
+  "max_price",
+  "min_rating",
+  "accommodates",
+  "bedrooms",
+  "amenity",
+] as const;
+
+const CHIP_LABELS: Record<string, string> = {
+  city: "City",
+  check_in: "Check-in",
+  check_out: "Check-out",
+  min_price: "Min price",
+  max_price: "Max price",
+  min_rating: "Min rating",
+  accommodates: "Guests",
+  bedrooms: "Bedrooms",
+  amenity: "Amenity",
+};
+
+function mapParsedToFilters(raw: Record<string, unknown>): Partial<SearchFilters> {
+  const out: Partial<SearchFilters> = { offset: 0 };
+  for (const key of FILTER_KEYS) {
+    const value = raw[key];
+    if (value !== null && value !== undefined && value !== "") {
+      (out as Record<string, unknown>)[key] = value;
+    }
+  }
+  return out;
+}
+
+function buildChips(raw: Record<string, unknown>): string[] {
+  return FILTER_KEYS.filter((key) => {
+    const value = raw[key];
+    return value !== null && value !== undefined && value !== "";
+  }).map((key) => `${CHIP_LABELS[key]}: ${raw[key]}`);
 }
 
 export default function NaturalLanguageBar({ onFiltersParsed }: NaturalLanguageBarProps) {
@@ -31,6 +56,7 @@ export default function NaturalLanguageBar({ onFiltersParsed }: NaturalLanguageB
   const [loading, setLoading] = useState(false);
   const [parsedChips, setParsedChips] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [hint, setHint] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -38,16 +64,19 @@ export default function NaturalLanguageBar({ onFiltersParsed }: NaturalLanguageB
 
     setLoading(true);
     setError(null);
+    setHint(null);
     setParsedChips([]);
 
     try {
       await streamChat(query.trim(), "search", (event) => {
         if (event.event === "filters_parsed" && event.filters) {
           const mapped = mapParsedToFilters(event.filters);
+          const chips = buildChips(event.filters);
+          if (chips.length === 0) {
+            setHint("Could not extract filters — try mentioning a city, price, or dates.");
+            return;
+          }
           onFiltersParsed(mapped);
-          const chips = Object.entries(event.filters)
-            .filter(([, v]) => v != null && v !== "")
-            .map(([k, v]) => `${k}: ${v}`);
           setParsedChips(chips);
         }
         if (event.event === "error") {
@@ -74,7 +103,7 @@ export default function NaturalLanguageBar({ onFiltersParsed }: NaturalLanguageB
             className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm"
           />
         </label>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             type="submit"
             disabled={loading || !query.trim()}
@@ -95,6 +124,7 @@ export default function NaturalLanguageBar({ onFiltersParsed }: NaturalLanguageB
             </div>
           )}
         </div>
+        {hint && <p className="text-xs text-amber-700">{hint}</p>}
         {error && <p className="text-xs text-red-600">{error}</p>}
       </form>
     </div>
