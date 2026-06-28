@@ -1,4 +1,4 @@
-from typing import Annotated, Literal, TypedDict
+from typing import Annotated, Literal, NotRequired, TypedDict
 
 from langgraph.graph.message import add_messages
 
@@ -35,6 +35,7 @@ class Citation(TypedDict):
     review_id: int
     listing_id: int
     quote: str
+    listing_name: NotRequired[str]
 
 
 class GraphState(TypedDict):

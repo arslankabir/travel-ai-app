@@ -693,3 +693,11 @@ python scripts/ingest.py --city barcelona --limit 10 --skip-embeddings
 - Initial progress doc after Phase 1 scaffold + Lisbon smoke test
 - Planning docs finalized (`PROJECT_PLAN.md`, `HL-component-diagram.md`)
 - Ingest pipeline bugs fixed (halfvec, NaN, calendar price column)
+
+### 2026-06-27 — Phase 4 property detail + mock booking
+- **Backend:** `GET /api/listings/{id}/detail` — full listing, aspect scores, up to 50 reviews, 90-day calendar, AI summary (DB or fallback)
+- **Frontend:** `/property/[id]` — photo, amenities, map, review filters, `#review-{id}` anchor for concierge citations
+- **Frontend:** `/booking/confirm` — mock reservation summary after Reserve
+- **Frontend:** Listing cards link to property detail; `PropertyMap` single-marker component
+- **Fix:** Listing/review IDs serialized as JSON strings — Airbnb IDs exceed JS `Number.MAX_SAFE_INTEGER` and were corrupting in the browser (detail API 404)
+- **Fix:** Review agent fallback citations from DB when LLM returns none; links show listing names in concierge

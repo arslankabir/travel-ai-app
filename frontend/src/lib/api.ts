@@ -5,7 +5,7 @@ export type SortOption =
   | "reviews_desc";
 
 export interface ListingCard {
-  id: number;
+  id: string;
   city: string;
   name: string | null;
   neighborhood: string | null;
@@ -27,6 +27,55 @@ export interface ListingsResponse {
   limit: number;
   offset: number;
   items: ListingCard[];
+}
+
+export interface AspectScores {
+  cleanliness: number | null;
+  location: number | null;
+  value: number | null;
+  communication: number | null;
+  checkin: number | null;
+}
+
+export interface ReviewItem {
+  id: string;
+  date: string | null;
+  reviewer_name: string | null;
+  comments: string | null;
+  language: string | null;
+  topics: string[];
+}
+
+export interface CalendarDay {
+  date: string;
+  available: boolean;
+  price: number | null;
+}
+
+export interface ListingDetail {
+  id: string;
+  city: string;
+  name: string | null;
+  description: string | null;
+  neighborhood: string | null;
+  property_type: string | null;
+  room_type: string | null;
+  price: number;
+  review_scores_rating: number | null;
+  number_of_reviews: number;
+  picture_url: string | null;
+  latitude: number;
+  longitude: number;
+  accommodates: number | null;
+  bedrooms: number | null;
+  beds: number | null;
+  bathrooms: number | null;
+  amenities: string[];
+  host_name: string | null;
+  aspects: AspectScores;
+  ai_summary: string | null;
+  reviews: ReviewItem[];
+  calendar: CalendarDay[];
 }
 
 export interface SearchFilters {
@@ -66,6 +115,16 @@ export async function fetchListings(
   });
   if (!res.ok) {
     throw new Error(`Listings request failed (${res.status})`);
+  }
+  return res.json();
+}
+
+export async function fetchListingDetail(id: string): Promise<ListingDetail> {
+  const res = await fetch(`${API_BASE}/api/listings/${id}/detail`, {
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    throw new Error(`Listing detail failed (${res.status})`);
   }
   return res.json();
 }

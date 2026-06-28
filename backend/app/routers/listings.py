@@ -6,7 +6,15 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.db.connection import get_db
-from app.schemas.listings import ListingCard, ListingsResponse, SortOption
+from app.schemas.listings import (
+    AspectScores,
+    CalendarDay,
+    ListingCard,
+    ListingDetail,
+    ListingsResponse,
+    ReviewItem,
+    SortOption,
+)
 
 router = APIRouter(prefix="/listings", tags=["listings"])
 
@@ -177,6 +185,126 @@ def search_listings(
         offset=offset,
         items=[_row_to_card(r) for r in rows],
     )
+
+
+@router.get("/{listing_id}/detail", response_model=ListingDetail)
+def get_listing_detail(listing_id: int, db: Session = Depends(get_db)) -> ListingDetail:
+    row = db.execute(
+        text(
+            """
+            SELECT l.id, l.city, l.name, l.description, l.neighborhood, l.property_type,
+                   l.room_type, l.price, l.review_scores_rating, l.number_of_reviews,
+                   l.picture_url, l.latitude, l.longitude, l.accommodates, l.bedrooms,
+                   l.beds, l.bathrooms, l.amenities, l.host_name,
+                   l.review_scores_cleanliness, l.review_scores_location,
+                   l.review_scores_value, l.review_scores_communication,
+                   l.review_scores_checkin
+            FROM listings l WHERE l.id = :id
+            """
+        ),
+        {"id": listing_id},
+    ).one_or_none()
+    if row is None:
+        raise HTTPException(404, "Listing not found")
+
+    amenities = row.amenities or []
+    if isinstance(amenities, str):
+        amenities = json.loads(amenities)
+
+    summary_row = db.execute(
+        text("SELECT summary FROM listing_review_summaries WHERE listing_id = :id"),
+        {"id": listing_id},
+    ).one_or_none()
+    ai_summary = summary_row.summary if summary_row else _fallback_summary(row)
+
+    review_rows = db.execute(
+        text(
+            """
+            SELECT id, date, reviewer_name, comments, language, topics
+            FROM reviews WHERE listing_id = :id
+            ORDER BY date DESC NULLS LAST
+            LIMIT 50
+            """
+        ),
+        {"id": listing_id},
+    ).fetchall()
+
+    cal_rows = db.execute(
+        text(
+            """
+            SELECT date, available, price FROM calendar
+            WHERE listing_id = :id AND date >= CURRENT_DATE
+            ORDER BY date ASC LIMIT 90
+            """
+        ),
+        {"id": listing_id},
+    ).fetchall()
+
+    reviews = [
+        ReviewItem(
+            id=int(r.id),
+            date=r.date,
+            reviewer_name=r.reviewer_name,
+            comments=r.comments,
+            language=r.language,
+            topics=r.topics if isinstance(r.topics, list) else json.loads(r.topics or "[]"),
+        )
+        for r in review_rows
+    ]
+
+    calendar = [
+        CalendarDay(
+            date=c.date,
+            available=bool(c.available),
+            price=float(c.price) if c.price is not None else None,
+        )
+        for c in cal_rows
+    ]
+
+    return ListingDetail(
+        id=int(row.id),
+        city=row.city,
+        name=row.name,
+        description=row.description,
+        neighborhood=row.neighborhood,
+        property_type=row.property_type,
+        room_type=row.room_type,
+        price=float(row.price),
+        review_scores_rating=float(row.review_scores_rating) if row.review_scores_rating is not None else None,
+        number_of_reviews=int(row.number_of_reviews or 0),
+        picture_url=row.picture_url,
+        latitude=float(row.latitude),
+        longitude=float(row.longitude),
+        accommodates=row.accommodates,
+        bedrooms=row.bedrooms,
+        beds=row.beds,
+        bathrooms=float(row.bathrooms) if row.bathrooms is not None else None,
+        amenities=amenities,
+        host_name=row.host_name,
+        aspects=AspectScores(
+            cleanliness=float(row.review_scores_cleanliness) if row.review_scores_cleanliness else None,
+            location=float(row.review_scores_location) if row.review_scores_location else None,
+            value=float(row.review_scores_value) if row.review_scores_value else None,
+            communication=float(row.review_scores_communication) if row.review_scores_communication else None,
+            checkin=float(row.review_scores_checkin) if row.review_scores_checkin else None,
+        ),
+        ai_summary=ai_summary,
+        reviews=reviews,
+        calendar=calendar,
+    )
+
+
+def _fallback_summary(row) -> str:
+    parts: list[str] = []
+    if row.review_scores_rating is not None and float(row.review_scores_rating) >= 4.5:
+        parts.append("Guests rate this stay highly overall.")
+    if row.review_scores_location is not None and float(row.review_scores_location) >= 4.5:
+        parts.append("Location is a common highlight.")
+    if row.review_scores_cleanliness is not None and float(row.review_scores_cleanliness) >= 4.5:
+        parts.append("Cleanliness scores are strong.")
+    if not parts:
+        return "Browse recent guest reviews below for themes and feedback."
+    return " ".join(parts) + " See individual reviews for details."
 
 
 @router.get("/{listing_id}", response_model=ListingCard)

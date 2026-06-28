@@ -1,13 +1,13 @@
 "use client";
 
-import { useRef, useState, type RefObject } from "react";
+import { useRef, useState, type MutableRefObject } from "react";
 
 import { SearchFilters } from "@/lib/api";
 import { streamChat } from "@/lib/sse";
 
 interface NaturalLanguageBarProps {
   onFiltersParsed: (filters: Partial<SearchFilters>) => void;
-  abortRef?: RefObject<AbortController | null>;
+  abortRef?: MutableRefObject<AbortController | null>;
 }
 
 const FILTER_KEYS = [

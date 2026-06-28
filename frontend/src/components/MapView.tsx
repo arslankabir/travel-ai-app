@@ -8,8 +8,8 @@ import { ListingCard } from "@/lib/api";
 
 interface MapViewProps {
   items: ListingCard[];
-  hoveredId: number | null;
-  onHover: (id: number | null) => void;
+  hoveredId: string | null;
+  onHover: (id: string | null) => void;
   onBboxChange: (bbox: string | undefined) => void;
 }
 
@@ -20,7 +20,6 @@ function listingsToGeoJSON(items: ListingCard[]): GeoJSON.FeatureCollection {
     type: "FeatureCollection",
     features: items.map((item) => ({
       type: "Feature",
-      id: item.id,
       geometry: {
         type: "Point",
         coordinates: [item.longitude, item.latitude],
@@ -42,7 +41,7 @@ export default function MapView({
 }: MapViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<Map | null>(null);
-  const hoveredRef = useRef<number | null>(null);
+  const hoveredRef = useRef<string | null>(null);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -50,13 +49,13 @@ export default function MapView({
 
     map.setPaintProperty("listings-unclustered", "circle-radius", [
       "case",
-      ["==", ["get", "id"], hoveredId ?? -1],
+      ["==", ["get", "id"], hoveredId ?? ""],
       10,
       7,
     ]);
     map.setPaintProperty("listings-unclustered", "circle-stroke-color", [
       "case",
-      ["==", ["get", "id"], hoveredId ?? -1],
+      ["==", ["get", "id"], hoveredId ?? ""],
       "#fbbf24",
       "#ffffff",
     ]);
@@ -143,8 +142,8 @@ export default function MapView({
         map.getCanvas().style.cursor = "pointer";
         const feature = e.features?.[0];
         const rawId = feature?.properties?.id;
-        const id = typeof rawId === "number" ? rawId : Number(rawId);
-        if (Number.isFinite(id) && hoveredRef.current !== id) {
+        const id = rawId != null ? String(rawId) : null;
+        if (id && hoveredRef.current !== id) {
           hoveredRef.current = id;
           onHover(id);
         }

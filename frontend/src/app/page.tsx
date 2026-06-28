@@ -28,7 +28,7 @@ export default function SearchPage() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [hoveredId, setHoveredId] = useState<number | null>(null);
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
   const nlAbortRef = useRef<AbortController | null>(null);
 
   const handleNlFilters = useCallback((parsed: Partial<SearchFilters>) => {

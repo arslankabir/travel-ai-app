@@ -94,7 +94,7 @@ async def stream_chat(req: ChatRequest) -> StreamingResponse:
                         if output_data.get("listings"):
                             yield _sse({
                                 "event": "listings_loaded",
-                                "listings": output_data["listings"],
+                                "listings": _public_listings(output_data["listings"]),
                             })
                         if output_data.get("response_text"):
                             yield _sse({"event": "message", "text": output_data["response_text"]})
@@ -103,7 +103,7 @@ async def stream_chat(req: ChatRequest) -> StreamingResponse:
                         if output_data.get("citations"):
                             yield _sse({
                                 "event": "citations_loaded",
-                                "citations": output_data["citations"],
+                                "citations": _public_citations(output_data["citations"]),
                             })
                         summary = output_data.get("review_summary")
                         if summary:
@@ -150,3 +150,27 @@ async def stream_chat(req: ChatRequest) -> StreamingResponse:
 
 def _sse(payload: dict) -> str:
     return f"data: {json.dumps(payload)}\n\n"
+
+
+def _public_listings(listings: list) -> list:
+    out = []
+    for item in listings:
+        if isinstance(item, dict):
+            out.append({**item, "id": str(item["id"])})
+    return out
+
+
+def _public_citations(citations: list) -> list:
+    out = []
+    for c in citations:
+        if not isinstance(c, dict):
+            continue
+        out.append(
+            {
+                "review_id": str(c["review_id"]),
+                "listing_id": str(c["listing_id"]),
+                "quote": c.get("quote", ""),
+                **({"listing_name": c["listing_name"]} if c.get("listing_name") else {}),
+            }
+        )
+    return out

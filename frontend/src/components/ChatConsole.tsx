@@ -17,7 +17,7 @@ export default function ChatConsole() {
   const [streaming, setStreaming] = useState(false);
   const [requestId, setRequestId] = useState<string | null>(null);
   const [citations, setCitations] = useState<
-    Array<{ review_id: number; listing_id: number; quote: string }>
+    Array<{ review_id: string; listing_id: string; quote: string; listing_name?: string }>
   >([]);
   const abortRef = useRef<AbortController | null>(null);
   const streamBuffer = useRef("");
@@ -146,16 +146,16 @@ export default function ChatConsole() {
               </div>
             ))}
             {citations.length > 0 && (
-              <div className="rounded-lg bg-zinc-50 p-2 text-xs">
-                <p className="mb-1 font-medium text-zinc-700">Citations</p>
+              <div className="rounded-lg border border-rose-100 bg-rose-50/50 p-2 text-xs">
+                <p className="mb-1 font-medium text-zinc-800">Source reviews (click to open)</p>
                 <ul className="space-y-1">
                   {citations.map((c) => (
                     <li key={c.review_id}>
                       <a
                         href={`/property/${c.listing_id}#review-${c.review_id}`}
-                        className="text-rose-700 underline"
+                        className="font-medium text-rose-700 underline"
                       >
-                        Listing {c.listing_id} · review {c.review_id}
+                        {c.listing_name ?? `Listing ${c.listing_id}`}
                       </a>
                       <span className="text-zinc-500"> — “{c.quote.slice(0, 80)}…”</span>
                     </li>

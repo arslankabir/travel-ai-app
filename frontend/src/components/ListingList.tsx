@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { ListingCard } from "@/lib/api";
 
 interface ListingListProps {
@@ -7,8 +8,8 @@ interface ListingListProps {
   total: number;
   limit: number;
   offset: number;
-  hoveredId: number | null;
-  onHover: (id: number | null) => void;
+  hoveredId: string | null;
+  onHover: (id: string | null) => void;
   onPage: (offset: number) => void;
 }
 
@@ -56,12 +57,16 @@ export default function ListingList({
               return (
                 <li
                   key={item.id}
-                  className={`flex cursor-pointer gap-3 p-4 transition-colors ${
+                  className={`transition-colors ${
                     active ? "bg-rose-50" : "hover:bg-zinc-50"
                   }`}
                   onMouseEnter={() => onHover(item.id)}
                   onMouseLeave={() => onHover(null)}
                 >
+                  <Link
+                    href={`/property/${item.id}`}
+                    className="flex cursor-pointer gap-3 p-4"
+                  >
                   <div className="h-24 w-32 shrink-0 overflow-hidden rounded-lg bg-zinc-100">
                     {item.picture_url ? (
                       // eslint-disable-next-line @next/next/no-img-element
@@ -108,6 +113,7 @@ export default function ListingList({
                       </p>
                     )}
                   </div>
+                  </Link>
                 </li>
               );
             })}

@@ -17,7 +17,7 @@ export interface SSEPayload {
   token?: string;
   filters?: Record<string, unknown>;
   listings?: unknown[];
-  citations?: Array<{ review_id: number; listing_id: number; quote: string }>;
+  citations?: Array<{ review_id: string; listing_id: string; quote: string; listing_name?: string }>;
   text?: string;
   latency_ms?: number;
   message?: string;

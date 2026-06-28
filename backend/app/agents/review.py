@@ -23,15 +23,82 @@ class ReviewOutput(BaseModel):
 
 REVIEW_SYSTEM = """You synthesize guest review insights for travel listings.
 Only cite reviews provided in the context. Each citation must use an exact review_id from context.
+Include 2-5 citations when reviews are available. Each quote must be a short excerpt from that review.
 Keep summary concise (3-5 sentences). Compare consistency and recurring themes when multiple listings."""
 
 
-def _validate_citations(citations: list[ReviewCitation], valid_ids: set[int]) -> list[Citation]:
+def _review_lookup(rows) -> tuple[set[int], dict[int, int]]:
+    valid_ids = {int(r.id) for r in rows}
+    id_to_listing = {int(r.id): int(r.listing_id) for r in rows}
+    return valid_ids, id_to_listing
+
+
+def _validate_citations(
+    citations: list[ReviewCitation],
+    valid_ids: set[int],
+    id_to_listing: dict[int, int],
+) -> list[Citation]:
     validated: list[Citation] = []
     for c in citations:
-        if c.review_id in valid_ids:
-            validated.append(Citation(review_id=c.review_id, listing_id=c.listing_id, quote=c.quote))
+        if c.review_id not in valid_ids:
+            continue
+        quote = (c.quote or "").strip()
+        if not quote:
+            continue
+        validated.append(
+            Citation(
+                review_id=c.review_id,
+                listing_id=id_to_listing.get(c.review_id, c.listing_id),
+                quote=quote[:200],
+            )
+        )
     return validated
+
+
+def _attach_listing_names(citations: list[Citation], listings: list) -> list[Citation]:
+    names = {int(h["id"]): h.get("name") or "Stay" for h in listings}
+    out: list[Citation] = []
+    for c in citations:
+        enriched: Citation = {
+            **c,
+            "listing_name": names.get(int(c["listing_id"]), "Stay"),
+        }
+        out.append(enriched)
+    return out
+
+
+def _fallback_citations(rows, listing_ids: list[int], *, max_total: int = 5) -> list[Citation]:
+    """Deterministic citations when the LLM omits or hallucinates review IDs."""
+    order = {int(lid): i for i, lid in enumerate(listing_ids)}
+    ranked = sorted(rows, key=lambda r: order.get(int(r.listing_id), 999))
+
+    citations: list[Citation] = []
+    seen_listings: set[int] = set()
+    for r in ranked:
+        lid = int(r.listing_id)
+        if lid in seen_listings:
+            continue
+        comment = (r.comments or "").strip()
+        if not comment:
+            continue
+        seen_listings.add(lid)
+        citations.append(
+            Citation(review_id=int(r.id), listing_id=lid, quote=comment[:200])
+        )
+        if len(citations) >= max_total:
+            return citations
+
+    for r in rows:
+        if len(citations) >= max_total:
+            break
+        comment = (r.comments or "").strip()
+        if not comment:
+            continue
+        rid, lid = int(r.id), int(r.listing_id)
+        if any(c["review_id"] == rid for c in citations):
+            continue
+        citations.append(Citation(review_id=rid, listing_id=lid, quote=comment[:200]))
+    return citations
 
 
 async def review_agent(state: GraphState) -> dict:
@@ -60,7 +127,7 @@ async def review_agent(state: GraphState) -> dict:
     if not rows:
         return {"review_summary": "No reviews found for these listings.", "citations": []}
 
-    valid_ids = {int(r.id) for r in rows}
+    valid_ids, id_to_listing = _review_lookup(rows)
     context_lines = [
         f"[review_id={r.id} listing_id={r.listing_id}] {(r.comments or '')[:400]}"
         for r in rows
@@ -77,15 +144,29 @@ async def review_agent(state: GraphState) -> dict:
         ),
     ]
 
+    summary = ""
     try:
         result: ReviewOutput = await structured.ainvoke(prompt)
+        summary = result.summary
+        citations = _validate_citations(result.citations, valid_ids, id_to_listing)
     except Exception:
         raw = await llm.ainvoke(prompt)
         content = raw.content if isinstance(raw.content, str) else str(raw.content)
         match = re.search(r"\{.*\}", content, re.DOTALL)
-        if not match:
-            return {"review_summary": content, "citations": []}
-        result = ReviewOutput.model_validate(json.loads(match.group()))
+        if match:
+            try:
+                result = ReviewOutput.model_validate(json.loads(match.group()))
+                summary = result.summary
+                citations = _validate_citations(result.citations, valid_ids, id_to_listing)
+            except Exception:
+                summary = content
+                citations = []
+        else:
+            summary = content
+            citations = []
 
-    citations = _validate_citations(result.citations, valid_ids)
-    return {"review_summary": result.summary, "citations": citations}
+    if not citations:
+        citations = _fallback_citations(rows, listing_ids)
+
+    citations = _attach_listing_names(citations, listings)
+    return {"review_summary": summary, "citations": citations}
