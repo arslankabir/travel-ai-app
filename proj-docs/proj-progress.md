@@ -3,7 +3,7 @@
 Living status doc for the Travel AI assignment. Update whenever major milestones complete or blockers resolve.
 
 **Last updated:** 2026-06-28  
-**Current phase:** Phase 3 in progress — LangGraph agents + hybrid SSE chat  
+**Current phase:** Phase 5 — deploy, README, EVAL.md, Loom (Phases 1–3 ✅ · Phase 4 core detail/booking ✅)  
 **Related docs:** [PROJECT_PLAN.md](./PROJECT_PLAN.md) · [HL-component-diagram.md](./HL-component-diagram.md) · [Full Stack AI Developer Assignment.md](./Full%20Stack%20AI%20Developer%20Assignment.md)
 
 ## How to update this file
@@ -59,9 +59,9 @@ print(f\"{'TOTAL':<12} {sum(x[1] for x in rows):>12,} {sum(x[2] for x in rows):>
 | :--- | :--- | :--- | :--- |
 | **1** Database & Ingestion | 0–8 | ✅ Done | 5 cities in DB; all minimums met |
 | **2** Core Search & Map | 8–18 | ✅ Done | FastAPI listings + Next.js map UI |
-| **3** AI Layer | 18–32 | 🟡 In progress | LangGraph, SSE chat, trace, NL search + concierge |
-| **4** Detail, Compare, Polish | 32–40 | ⬜ Not started | |
-| **5** Deploy, Eval, Loom | 40–48 | ⬜ Not started | |
+| **3** AI Layer | 18–32 | ✅ Done | LangGraph, hybrid SSE, NL search, concierge, trace, golden-query fixes |
+| **4** Detail, Compare, Polish | 32–40 | 🟡 Partial | Detail page + mock booking + citations ✅; compare/wishlist ⬜ |
+| **5** Deploy, Eval, Loom | 40–48 | 🟡 In progress | README polish, live URL, `EVAL.md`, 5-min video ⬜ |
 
 ---
 
@@ -105,34 +105,50 @@ print(f\"{'TOTAL':<12} {sum(x[1] for x in rows):>12,} {sum(x[2] for x in rows):>
 - [x] pandas `NaN` in text columns — `null_if_nan()`
 - [x] Lisbon & Barcelona `calendar.csv` have **no `price` column** — ingest availability only; nightly price stored as `NULL` (use listing base price at query time). Amsterdam & Bergamo include calendar price.
 
+### Phase 2 — search & map
+- [x] `GET /api/listings` — filters, bbox, sort, pagination, calendar availability
+- [x] Next.js split-screen UI — `FilterBar`, `ListingList`, `MapView` (MapLibre)
+- [x] Real data path: frontend → FastAPI → PostgreSQL
+
+### Phase 3 — AI layer
+- [x] `ModelFactory` — pluggable Ollama/OpenAI chat LLMs; fixed OpenAI embeddings
+- [x] LangGraph: Intent → Retrieval → Review → Itinerary with conditional routing
+- [x] Hybrid retrieval: SQL filters + pgvector semantic search + filter relaxation
+- [x] Review agent with citation validation + **DB fallback citations** when LLM omits IDs
+- [x] `POST /api/chat/stream` (SSE) + `GET /api/trace/{request_id}`
+- [x] Frontend: `NaturalLanguageBar`, `ChatConsole`, `lib/sse.ts`, `AgentPipeline` loading UX
+- [x] Heuristic intent fallback when Ollama offline (NL search still works)
+- [x] Chitchat guard, unsupported-city message, golden-query retrieval fixes
+- [x] **Ollama Option A verified** — see [log](#2026-06-28--ollama-setup--phase-3-smoke)
+
+### Phase 4 — detail & booking (core)
+- [x] `GET /api/listings/{id}/detail` — reviews, calendar, aspect scores, AI summary
+- [x] `/property/[id]` — photos, amenities, map, review filters, `#review-{id}` anchor
+- [x] `/booking/confirm` — mock reservation flow
+- [x] Listing cards → property detail links
+- [x] **BigInt ID fix** — listing/review IDs serialized as JSON strings (JS safe integer)
+
 ---
 
 ## In progress / next up
 
-### Phase 3 — AI Layer (current)
-- [x] `ModelFactory` — pluggable Ollama/OpenAI chat LLMs; fixed OpenAI embeddings
-- [x] LangGraph: Intent → Retrieval → Review → Itinerary with conditional routing
-- [x] Hybrid retrieval: SQL filters + pgvector semantic search
-- [x] Review agent with citation validation against DB reviews
-- [x] `POST /api/chat/stream` (SSE) + `GET /api/trace/{request_id}`
-- [x] Frontend: `NaturalLanguageBar`, `ChatConsole`, `lib/sse.ts`
-- [x] Heuristic intent fallback when Ollama offline (NL search still works)
-- [x] **Ollama Option A verified** (2026-06-28) — models pulled; intent agent + SSE working; see [log](#2026-06-28--ollama-setup--phase-3-smoke)
-- [x] `ModelFactory` reads LLM + embedding keys from pydantic `Settings` (fixes `OPENAI_API_KEY` not visible to retrieval)
-- [x] **Phase 3 UX fixes** (2026-06-28) — chitchat guard, NL filter merge, hide JSON tokens in concierge; see [log](#2026-06-28--phase-3-ux-fixes)
-- [ ] Concierge results → sync to main list/map (optional polish)
-- [ ] Batch compare endpoint (`/api/batch/compare`) — Phase 4 overlap
-- [ ] Redis caching for search/summaries — Phase 4 overlap
+### Phase 5 — submission (current)
+- [ ] **Deploy** — Railway (API + DB) + Vercel (frontend); live URL
+- [ ] **README** — one-command run, Mermaid diagram, trade-offs, cost/query estimate
+- [ ] **`EVAL.md`** — golden queries + manual scoring
+- [ ] **5-min Loom** — filter search, NL search, complex concierge query, one failure case
 
-### Phase 4 — next
-- [ ] Property detail page, compare matrix, wishlist
+### Phase 4 — remaining (if time before submit)
+- [ ] Compare matrix UI + `/api/batch/compare`
+- [ ] Wishlist (localStorage)
+- [ ] Concierge results → sync to main list/map (optional polish)
 - [ ] UI polish (Booking-style density)
 
-### Phase 1 — remaining (optional)
-- [ ] Document ingest slice strategy in README (raw vs validated, review caps, madrid `--limit 10100`)
+### Deferred / document as trade-off
+- [ ] Redis caching for search/summaries
+- [ ] `export_deploy.py` (Supabase slice), `enrich_reviews.py`
 - [ ] Hybrid query < 50ms benchmark
-- [ ] Implement `enrich_reviews.py` (precomputed summaries for deploy slice)
-- [ ] Implement `export_deploy.py` (Supabase slice)
+- [ ] Document ingest slice strategy in README (raw vs validated, review caps, madrid `--limit`)
 
 ### Phase 3 — run locally
 ```bash
@@ -640,6 +656,12 @@ python scripts/ingest.py --city barcelona --limit 10 --skip-embeddings
 
 ## Changelog
 
+### 2026-06-28 (concierge pipeline loading UX)
+- `AgentPipeline` stepper + in-chat loading status with “Up next”; auto-scroll in concierge
+
+### 2026-06-28 (property detail + citations)
+- Detail API/page, mock booking, bigint ID string serialization, review citation fallback + named links
+
 ### 2026-06-28 (golden query retrieval fixes)
 - Filter relaxation fallback, price cap normalization, unsupported-city message, deduped review SSE
 
@@ -693,6 +715,11 @@ python scripts/ingest.py --city barcelona --limit 10 --skip-embeddings
 - Initial progress doc after Phase 1 scaffold + Lisbon smoke test
 - Planning docs finalized (`PROJECT_PLAN.md`, `HL-component-diagram.md`)
 - Ingest pipeline bugs fixed (halfvec, NaN, calendar price column)
+
+### 2026-06-28 — Concierge pipeline loading UX
+- **`AgentPipeline`** stepper — Intent → Search → Reviews → Itinerary with pending/running/done/skipped states
+- **In-chat loading** — spinner + current step text + “Up next” (covers gap between listings message and review/citations)
+- Auto-scroll in concierge panel as messages/citations arrive
 
 ### 2026-06-27 — Phase 4 property detail + mock booking
 - **Backend:** `GET /api/listings/{id}/detail` — full listing, aspect scores, up to 50 reviews, 90-day calendar, AI summary (DB or fallback)
