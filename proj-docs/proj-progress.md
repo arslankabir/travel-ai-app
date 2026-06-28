@@ -143,7 +143,7 @@ print(f\"{'TOTAL':<12} {sum(x[1] for x in rows):>12,} {sum(x[2] for x in rows):>
 - [x] **`DEPLOY.md`** + root `Dockerfile` + `railway.toml` for Railway
 - [x] **`scripts/run-local.sh`** — docker compose bootstrap
 - [x] **Supabase DB slice** — schema + ingest (11,850 listings, 56,007 reviews) — see [deploy-progress.md](./deploy-progress.md)
-- [ ] **Railway API** — domain generated; **502 on public URL** — fix Root Directory + redeploy
+- [x] **Railway API** — https://travel-ai-app-production-bc05.up.railway.app (`db:true`, Session pooler) — see [deploy-progress.md](./deploy-progress.md)
 - [ ] **Vercel frontend** → live URL
 - [ ] **Live deploy smoke test** — filter, NL, concierge, failure case on production URL
 
@@ -660,6 +660,11 @@ python scripts/ingest.py --city barcelona --limit 10 --skip-embeddings
 ---
 
 ## Changelog
+
+### 2026-06-28 (Railway live — Session pooler fix)
+- API URL: https://travel-ai-app-production-bc05.up.railway.app — `/health` → `{"status":"ok","db":true}`
+- Fix chain: PORT/socat 502 → localhost DATABASE_URL → IPv6 direct host → **Session pooler** URI (IPv4)
+- Documented in [deploy-progress.md](./deploy-progress.md#railway--supabase-connection-fix-log)
 
 ### 2026-06-28 (Railway deploy — 502 troubleshooting)
 - Railway URL returns 502 — likely Root Directory / port mismatch

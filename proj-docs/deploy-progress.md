@@ -13,7 +13,7 @@ Stack: **Supabase** (Postgres) · **Railway** (FastAPI) · **Vercel** (Next.js)
 | Extensions (`postgis`, `vector`) | ✅ | |
 | Schema (`init-extensions.sql`) | ✅ | tables: listings, reviews, calendar, listing_review_summaries |
 | Deploy data slice ingested | ✅ | 2026-06-28 — see logs below |
-| Railway API deployed | 🟡 | `/health` ✅ · listings 500 → SSL + verify `DATABASE_URL` |
+| Railway API deployed | ✅ | 2026-06-28 — see [Railway fixes](#railway--supabase-connection-fix-log) |
 | Vercel frontend deployed | ⬜ | |
 | Production smoke test | ⬜ | filter, NL search, concierge, failure case |
 | Live URL in README / submission | ⬜ | API: `https://travel-ai-app-production-bc05.up.railway.app` |
@@ -24,80 +24,91 @@ Stack: **Supabase** (Postgres) · **Railway** (FastAPI) · **Vercel** (Next.js)
 
 - **Project:** `giving-quietude` · service: `travel-ai-app`
 - **Public URL:** https://travel-ai-app-production-bc05.up.railway.app
-- **Deploy status:** App healthy internally (`GET /health` 200 on port **8080**) · public URL still **502** → fix Networking port (below)
-
-### Fix public 502 (app runs, edge can't reach it)
-
-Deploy logs show:
-```
-Uvicorn running on http://0.0.0.0:8080
-100.64.0.2 - "GET /health HTTP/1.1" 200 OK
-```
-
-The container is fine. Railway's **public domain is routing to the wrong port** (often 8000 while app listens on **8080**).
-
-**Code fix (pushed):** `backend/start.sh` forwards public port **8000 → $PORT** (8080) via socat so Railway edge routing works without UI changes.
-
-**In Railway UI (optional):**
-
-1. Open service **travel-ai-app** → **Settings** → **Networking**
-2. Under your domain `travel-ai-app-production-bc05.up.railway.app`, find **Target port** / **Port**
-3. Set it to **`8080`** (match the Deploy Log line above) — **not** 8000
-4. Save → wait ~30s → retry:
-   ```bash
-   curl https://travel-ai-app-production-bc05.up.railway.app/health
-   ```
-
-If no port field: **Remove domain** → **Generate Domain** again (after deploy is Active).
-
-### Required Railway settings
-
-1. **Settings → Root Directory:** leave **empty** (repo root). Root `Dockerfile` copies `backend/`.
-2. **Settings → Networking → Generate Domain** (done)
-3. **Networking → Port:** must match Deploy Logs (e.g. **8080**), not 8000
-4. **Variables** (must all be set):
-
-   | Variable | Value |
-   | :--- | :--- |
-   | `DATABASE_URL` | Supabase URI |
-   | `OPENAI_API_KEY` | Production key |
-   | `LLM_PROVIDER` | `openai` |
-   | `LLM_BASE_URL` | `https://api.openai.com/v1` |
-   | `LLM_MODEL_INTENT` | `gpt-4o-mini` |
-   | `LLM_MODEL_REVIEW` | `gpt-4o-mini` |
-   | `LLM_MODEL_ITINERARY` | `gpt-4o` |
-   | `EMBEDDING_MODEL` | `text-embedding-3-small` |
-   | `VECTOR_DIMENSION` | `512` |
-   | `CORS_ORIGINS` | `http://localhost:3000` (add Vercel URL later) |
-
-   **Remove** `REDIS_URL=redis://localhost:6379/0` — no Redis on Railway.
-
-   **`DATABASE_URL` password:** URL-encode `%` as `%25` (same as ingest).
-
-   **Still `db: false`?** Use Supabase **Session pooler** (IPv4-friendly for Railway):
-   Supabase → Connect → **Session pooler** → URI like
-   `postgresql://postgres.unrkkzzmeumoogivclpv:PASSWORD@aws-0-ap-northeast-2.pooler.supabase.com:5432/postgres`
-
-4. **Redeploy** after env changes.
+- **Status (2026-06-28):** ✅ `GET /health` → `{"status":"ok","db":true}`
 
 ### Verify
 
 ```bash
 curl https://travel-ai-app-production-bc05.up.railway.app/health
-# expect: {"status":"ok"}
+# {"status":"ok","db":true}
 
 curl "https://travel-ai-app-production-bc05.up.railway.app/api/listings?city=lisbon&limit=3"
 ```
 
-If still 502: open **Deploy Logs** — look for crash/OOM; confirm Root Directory = `backend`.
+---
+
+## Railway + Supabase connection fix log
+
+Chronological issues and fixes (save this for future deploys):
+
+| # | Symptom | Cause | Fix |
+|:-:|:---|:---|:---|
+| 1 | Build failed | No root `Dockerfile` | Repo-root `Dockerfile` copies `backend/`; Root Directory **empty** |
+| 2 | Healthcheck failed | Uvicorn on 8000, Railway `PORT`=8080 | `${PORT:-8000}` in Dockerfile + `backend/start.sh` |
+| 3 | Public **502**, deploy OK | Edge routes to **8000**, app on **8080** | `socat` forwards 8000→8080 in `start.sh` |
+| 4 | `"db": false` | `DATABASE_URL` pointed at **localhost** | Use Supabase URI on Railway, not local Docker |
+| 5 | `db_error`: IPv6 **Network is unreachable** | Direct `db.*.supabase.co` is IPv6; Railway has no IPv6 | Use **Session pooler** URI (IPv4), not direct host |
+| 6 | `tenant/user postgres.unrkkzzmeumoogivclpv not found` | Wrong pooler host/region or hand-built URI | Copy URI exactly from Supabase → Connect → **Session pooler** |
+| 7 | ✅ **`{"status":"ok","db":true}`** | Session pooler + encoded password | See working `DATABASE_URL` format below |
+
+### Working `DATABASE_URL` on Railway (Session pooler)
+
+Copy from Supabase → **Connect** → **Session pooler** (port **5432**). Shape:
+
+```
+postgresql://postgres.unrkkzzmeumoogivclpv:PASSWORD@aws-0-ap-northeast-2.pooler.supabase.com:5432/postgres
+```
+
+| Context | User | Host |
+| :--- | :--- | :--- |
+| **Local ingest** (Mac) | `postgres` | `db.unrkkzzmeumoogivclpv.supabase.co` |
+| **Railway API** (prod) | `postgres.unrkkzzmeumoogivclpv` | `aws-0-ap-northeast-2.pooler.supabase.com` |
+
+- URL-encode `%` in password as **`%25`**
+- No quotes around values in Railway Variables
+- Code auto-adds `sslmode=require` for remote hosts (`backend/app/db/connection.py`)
+- `/health` exposes `db_error` when `db: false` (deploy debugging)
+
+### Required Railway variables
+
+| Variable | Value |
+| :--- | :--- |
+| `DATABASE_URL` | Session pooler URI (above) |
+| `OPENAI_API_KEY` | Production key |
+| `LLM_PROVIDER` | `openai` |
+| `LLM_BASE_URL` | `https://api.openai.com/v1` |
+| `LLM_MODEL_INTENT` | `gpt-4o-mini` |
+| `LLM_MODEL_REVIEW` | `gpt-4o-mini` |
+| `LLM_MODEL_ITINERARY` | `gpt-4o` |
+| `EMBEDDING_MODEL` | `text-embedding-3-small` |
+| `VECTOR_DIMENSION` | `512` |
+| `CORS_ORIGINS` | `http://localhost:3000` (+ Vercel URL after frontend deploy) |
+
+**Remove** `REDIS_URL=redis://localhost:6379/0` — in-memory cache on Railway.
+
+### Code changes for Railway (in repo)
+
+- Root `Dockerfile` + `backend/start.sh` (PORT + socat 8000→8080)
+- `backend/app/db/connection.py` — SSL + `db_error` on `/health`
+- `backend/app/main.py` — `/health` returns `db` + `db_error`
 
 ---
 
+## Railway troubleshooting (archived)
+
 ## Supabase connection
 
+### Local ingest (direct — IPv6 OK on Mac)
+
 - **Host:** `db.unrkkzzmeumoogivclpv.supabase.co:5432`
-- **Database:** `postgres` · **User:** `postgres`
-- **URI pattern:** `postgresql://postgres:PASSWORD@db.unrkkzzmeumoogivclpv.supabase.co:5432/postgres`
+- **User:** `postgres`
+- **URI:** `postgresql://postgres:PASSWORD@db.unrkkzzmeumoogivclpv.supabase.co:5432/postgres`
+
+### Railway API (Session pooler — IPv4 required)
+
+- **Host:** `aws-0-ap-northeast-2.pooler.supabase.com:5432`
+- **User:** `postgres.unrkkzzmeumoogivclpv`
+- **URI:** copy from Supabase → Connect → **Session pooler**
 - **URL-encode `%` in password** as `%25` when using the URI in shell exports.
 - **Do not commit** passwords or API keys. Store `DATABASE_URL` in Railway env vars only.
 
@@ -208,33 +219,16 @@ SELECT COUNT(*) AS total_calendar FROM calendar;
 
 ## Next steps
 
-### 1. Railway (API)
+### 1. Railway (API) — ✅ done
 
-1. New project → Deploy from GitHub → this repo.
-2. Railway reads root `Dockerfile` (copies `backend/`). **Do not** set Root Directory to `backend`.
-3. Environment variables:
+Live: https://travel-ai-app-production-bc05.up.railway.app  
+Use **Session pooler** `DATABASE_URL` on Railway (see fix log above).
 
-   | Variable | Value |
-   | :--- | :--- |
-   | `DATABASE_URL` | Supabase URI (`?sslmode=require` optional — auto-added for remote hosts) |
-   | `OPENAI_API_KEY` | Production key |
-   | `LLM_PROVIDER` | `openai` |
-   | `LLM_BASE_URL` | `https://api.openai.com/v1` |
-   | `LLM_MODEL_INTENT` | `gpt-4o-mini` |
-   | `LLM_MODEL_REVIEW` | `gpt-4o-mini` |
-   | `LLM_MODEL_ITINERARY` | `gpt-4o` |
-   | `CORS_ORIGINS` | `https://YOUR-APP.vercel.app` |
-   | `EMBEDDING_MODEL` | `text-embedding-3-small` |
-   | `VECTOR_DIMENSION` | `512` |
-
-4. Deploy → `curl https://YOUR-RAILWAY-URL/health`
-5. `curl "https://YOUR-RAILWAY-URL/api/listings?city=lisbon&limit=3"`
-
-### 2. Vercel (frontend)
+### 2. Vercel (frontend) — **current**
 
 1. Import repo → Root Directory: `frontend`.
-2. `NEXT_PUBLIC_API_URL` = Railway URL (no trailing slash).
-3. Deploy → open app → search Lisbon.
+2. `NEXT_PUBLIC_API_URL` = `https://travel-ai-app-production-bc05.up.railway.app` (no trailing slash).
+3. Deploy → add Vercel URL to Railway `CORS_ORIGINS`.
 
 ### 3. Production smoke test
 
