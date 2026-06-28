@@ -1,7 +1,15 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
+import AgentPipeline, {
+  markNodeDone,
+  markNodeStarted,
+  markPipelineComplete,
+  initPipeline,
+  LoadingStatus,
+  PipelineStep,
+} from "@/components/AgentPipeline";
 import { fetchTrace, streamChat, SSEPayload } from "@/lib/sse";
 
 interface ChatMessage {
@@ -9,28 +17,57 @@ interface ChatMessage {
   content: string;
 }
 
+function isListingsMessage(text: string) {
+  return text.includes("Found") && text.includes("matching stays");
+}
+
+function isReviewSummaryMessage(text: string) {
+  return text.includes("Review insights");
+}
+
 export default function ChatConsole() {
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [steps, setSteps] = useState<string[]>([]);
+  const [pipelineSteps, setPipelineSteps] = useState<PipelineStep[]>([]);
   const [streaming, setStreaming] = useState(false);
+  const [awaitingReview, setAwaitingReview] = useState(false);
+  const [afterListings, setAfterListings] = useState(false);
   const [requestId, setRequestId] = useState<string | null>(null);
   const [citations, setCitations] = useState<
     Array<{ review_id: string; listing_id: string; quote: string; listing_name?: string }>
   >([]);
   const abortRef = useRef<AbortController | null>(null);
   const streamBuffer = useRef("");
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    scrollRef.current?.scrollTo({
+      top: scrollRef.current.scrollHeight,
+      behavior: "smooth",
+    });
+  }, [messages, citations, pipelineSteps, streaming, awaitingReview, afterListings]);
+
+  const finishReviewPhase = () => {
+    setAwaitingReview(false);
+    setAfterListings(false);
+  };
 
   const handleEvent = (event: SSEPayload) => {
     if (event.event === "trace_init" && event.request_id) {
       setRequestId(event.request_id);
       return;
     }
+
     if (event.event === "node_start" && event.node) {
-      setSteps((prev) => [...prev, event.node!]);
+      if (event.node === "review_agent") {
+        setAwaitingReview(true);
+        setAfterListings(false);
+      }
+      setPipelineSteps((prev) => markNodeStarted(prev, event.node!));
       return;
     }
+
     if (event.event === "token" && event.token) {
       streamBuffer.current += event.token;
       setMessages((prev) => {
@@ -45,18 +82,41 @@ export default function ChatConsole() {
       });
       return;
     }
+
     if (event.event === "message" && event.text) {
       streamBuffer.current = "";
       setMessages((prev) => [...prev, { role: "assistant", content: event.text! }]);
+
+      if (isListingsMessage(event.text)) {
+        setPipelineSteps((prev) => markNodeDone(prev, "retrieval_agent"));
+        setAfterListings(true);
+      }
+      if (isReviewSummaryMessage(event.text)) {
+        finishReviewPhase();
+      }
       return;
     }
+
     if (event.event === "itinerary" && event.text) {
+      finishReviewPhase();
       setMessages((prev) => [...prev, { role: "assistant", content: event.text! }]);
+      return;
     }
+
     if (event.event === "citations_loaded" && event.citations) {
       setCitations(event.citations);
+      finishReviewPhase();
+      return;
     }
+
+    if (event.event === "complete") {
+      setPipelineSteps((prev) => markPipelineComplete(prev));
+      finishReviewPhase();
+      return;
+    }
+
     if (event.event === "error") {
+      finishReviewPhase();
       setMessages((prev) => [
         ...prev,
         { role: "assistant", content: `⚠ ${event.message ?? "Something went wrong"}` },
@@ -68,8 +128,10 @@ export default function ChatConsole() {
     if (!input.trim() || streaming) return;
     const text = input.trim();
     setInput("");
-    setSteps([]);
+    setPipelineSteps(initPipeline());
     setCitations([]);
+    setAwaitingReview(false);
+    setAfterListings(false);
     streamBuffer.current = "";
     setMessages((prev) => [...prev, { role: "user", content: text }]);
 
@@ -84,6 +146,8 @@ export default function ChatConsole() {
       }
     } finally {
       setStreaming(false);
+      finishReviewPhase();
+      setPipelineSteps((prev) => markPipelineComplete(prev));
       streamBuffer.current = "";
     }
   };
@@ -104,6 +168,8 @@ export default function ChatConsole() {
     }
   };
 
+  const showLoading = streaming && (awaitingReview || afterListings || pipelineSteps.some((s) => s.status === "running"));
+
   return (
     <>
       <button
@@ -115,24 +181,16 @@ export default function ChatConsole() {
       </button>
 
       {open && (
-        <div className="fixed bottom-20 right-5 z-50 flex h-[min(70vh,520px)] w-[min(92vw,400px)] flex-col rounded-xl border border-zinc-200 bg-white shadow-2xl">
+        <div className="fixed bottom-20 right-5 z-50 flex h-[min(70vh,520px)] w-[min(92vw,400px)] flex-col overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-2xl">
           <div className="border-b border-zinc-200 px-4 py-3">
             <h2 className="font-semibold text-zinc-900">Travel concierge</h2>
             <p className="text-xs text-zinc-500">Multi-agent search, reviews & itineraries</p>
           </div>
 
-          {steps.length > 0 && (
-            <div className="flex flex-wrap gap-1 border-b border-zinc-100 px-3 py-2">
-              {steps.map((step, i) => (
-                <span key={`${step}-${i}`} className="rounded bg-zinc-100 px-2 py-0.5 text-[10px] text-zinc-600">
-                  {step}
-                </span>
-              ))}
-            </div>
-          )}
+          <AgentPipeline steps={pipelineSteps} streaming={streaming} />
 
-          <div className="flex-1 space-y-2 overflow-y-auto px-3 py-3 text-sm">
-            {messages.length === 0 && (
+          <div ref={scrollRef} className="flex-1 space-y-2 overflow-y-auto px-3 py-3 text-sm">
+            {messages.length === 0 && !streaming && (
               <p className="text-zinc-400">Ask about stays, reviews, or trip plans…</p>
             )}
             {messages.map((m, i) => (
@@ -145,6 +203,14 @@ export default function ChatConsole() {
                 {m.content}
               </div>
             ))}
+            {showLoading && (
+              <LoadingStatus
+                steps={pipelineSteps}
+                streaming={streaming}
+                awaitingReview={awaitingReview}
+                afterListings={afterListings}
+              />
+            )}
             {citations.length > 0 && (
               <div className="rounded-lg border border-rose-100 bg-rose-50/50 p-2 text-xs">
                 <p className="mb-1 font-medium text-zinc-800">Source reviews (click to open)</p>
@@ -181,7 +247,7 @@ export default function ChatConsole() {
                 disabled={streaming || !input.trim()}
                 className="rounded-md bg-zinc-900 px-3 py-1.5 text-sm text-white disabled:opacity-50"
               >
-                Send
+                {streaming ? "…" : "Send"}
               </button>
             </div>
             {requestId && (
