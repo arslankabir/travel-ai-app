@@ -24,13 +24,37 @@ Stack: **Supabase** (Postgres) · **Railway** (FastAPI) · **Vercel** (Next.js)
 
 - **Project:** `giving-quietude` · service: `travel-ai-app`
 - **Public URL:** https://travel-ai-app-production-bc05.up.railway.app
-- **Deploy status:** Build + internal healthcheck ✅ · public requests return **502** (2026-06-28)
+- **Deploy status:** App healthy internally (`GET /health` 200 on port **8080**) · public URL still **502** → fix Networking port (below)
+
+### Fix public 502 (app runs, edge can't reach it)
+
+Deploy logs show:
+```
+Uvicorn running on http://0.0.0.0:8080
+100.64.0.2 - "GET /health HTTP/1.1" 200 OK
+```
+
+The container is fine. Railway's **public domain is routing to the wrong port** (often 8000 while app listens on **8080**).
+
+**Code fix (pushed):** `backend/start.sh` forwards public port **8000 → $PORT** (8080) via socat so Railway edge routing works without UI changes.
+
+**In Railway UI (optional):**
+
+1. Open service **travel-ai-app** → **Settings** → **Networking**
+2. Under your domain `travel-ai-app-production-bc05.up.railway.app`, find **Target port** / **Port**
+3. Set it to **`8080`** (match the Deploy Log line above) — **not** 8000
+4. Save → wait ~30s → retry:
+   ```bash
+   curl https://travel-ai-app-production-bc05.up.railway.app/health
+   ```
+
+If no port field: **Remove domain** → **Generate Domain** again (after deploy is Active).
 
 ### Required Railway settings
 
 1. **Settings → Root Directory:** leave **empty** (repo root). Root `Dockerfile` copies `backend/`.
 2. **Settings → Networking → Generate Domain** (done)
-3. **Networking → Port:** leave **Auto** (must match Railway `$PORT`, not hardcoded 8000)
+3. **Networking → Port:** must match Deploy Logs (e.g. **8080**), not 8000
 4. **Variables** (must all be set):
 
    | Variable | Value |
@@ -219,7 +243,7 @@ See [DEPLOY.md](../DEPLOY.md) §4 and [EVAL.md](../EVAL.md) golden queries.
 | `python: command not found` | `cd ingestion && source .venv/bin/activate` before running script |
 | Connection refused / auth failed | URL-encode `%` in password; use direct port 5432 |
 | Healthcheck failure after deploy | Dockerfile must bind `${PORT:-8000}` (Railway injects `PORT`) |
-| Public 502 but deploy shows Active | Clear Root Directory (use repo root + root `Dockerfile`); remove `REDIS_URL=localhost`; check Networking port = Auto |
+| Public 502 but Deploy Logs show `/health` 200 | Set Networking **target port** to Deploy Log port (e.g. **8080**) |
 | Build failed: Dockerfile not found | Use repo root deploy + root `Dockerfile` (copies `backend/`) |
 | 0 listings on Railway | Wrong `DATABASE_URL` or CORS blocking frontend only |
 | Chat timeout on Railway | Warm with `/health` + one chat request; use OpenAI not Ollama |
