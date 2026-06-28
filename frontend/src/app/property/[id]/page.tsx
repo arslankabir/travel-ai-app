@@ -2,8 +2,11 @@
 
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
+import BookingCard from "@/components/property/BookingCard";
+import PropertyReviews from "@/components/property/PropertyReviews";
+import RatingBreakdown from "@/components/property/RatingBreakdown";
 import PropertyMap from "@/components/PropertyMap";
 import { fetchListingDetail, ListingDetail } from "@/lib/api";
 
@@ -15,17 +18,9 @@ function formatPrice(price: number) {
   }).format(price);
 }
 
-function formatDate(iso: string) {
-  return new Date(iso + "T00:00:00").toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
-
 function nightsBetween(checkIn: string, checkOut: string) {
-  const start = new Date(checkIn + "T00:00:00");
-  const end = new Date(checkOut + "T00:00:00");
+  const start = new Date(`${checkIn}T00:00:00`);
+  const end = new Date(`${checkOut}T00:00:00`);
   return Math.max(0, Math.round((end.getTime() - start.getTime()) / 86400000));
 }
 
@@ -38,12 +33,9 @@ export default function PropertyPage() {
   const [listing, setListing] = useState<ListingDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [langFilter, setLangFilter] = useState("");
-  const [topicFilter, setTopicFilter] = useState("");
   const [checkIn, setCheckIn] = useState(searchParams.get("check_in") ?? "");
   const [checkOut, setCheckOut] = useState(searchParams.get("check_out") ?? "");
-
-  const reviewRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const [highlightReviewId, setHighlightReviewId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!id) {
@@ -59,52 +51,36 @@ export default function PropertyPage() {
 
   useEffect(() => {
     if (!listing || typeof window === "undefined") return;
-    const hash = window.location.hash;
-    const match = hash.match(/^#review-(\d+)$/);
+    const match = window.location.hash.match(/^#review-(\d+)$/);
     if (!match) return;
     const reviewId = match[1];
-    const el = reviewRefs.current[reviewId];
+    setHighlightReviewId(reviewId);
+    const el = document.getElementById(`review-${reviewId}`);
     if (el) {
-      el.scrollIntoView({ behavior: "smooth", block: "center" });
-      el.classList.add("ring-2", "ring-rose-400");
-      const t = setTimeout(() => el.classList.remove("ring-2", "ring-rose-400"), 2500);
-      return () => clearTimeout(t);
+      window.setTimeout(() => {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+      }, 300);
     }
   }, [listing]);
-
-  const languages = useMemo(() => {
-    if (!listing) return [];
-    return Array.from(
-      new Set(
-        listing.reviews
-          .map((r) => r.language)
-          .filter((l): l is string => Boolean(l)),
-      ),
-    );
-  }, [listing]);
-
-  const topics = useMemo(() => {
-    if (!listing) return [];
-    const set = new Set<string>();
-    for (const r of listing.reviews) {
-      for (const t of r.topics) set.add(t);
-    }
-    return Array.from(set).sort();
-  }, [listing]);
-
-  const filteredReviews = useMemo(() => {
-    if (!listing) return [];
-    return listing.reviews.filter((r) => {
-      if (langFilter && r.language !== langFilter) return false;
-      if (topicFilter && !r.topics.includes(topicFilter)) return false;
-      return true;
-    });
-  }, [listing, langFilter, topicFilter]);
 
   const nights = checkIn && checkOut ? nightsBetween(checkIn, checkOut) : 0;
   const subtotal = listing && nights > 0 ? listing.price * nights : 0;
   const tax = subtotal * 0.12;
   const total = subtotal + tax;
+
+  const aspectEntries = useMemo(
+    () =>
+      listing
+        ? [
+            { label: "Cleanliness", score: listing.aspects.cleanliness },
+            { label: "Location", score: listing.aspects.location },
+            { label: "Value", score: listing.aspects.value },
+            { label: "Communication", score: listing.aspects.communication },
+            { label: "Check-in", score: listing.aspects.checkin },
+          ]
+        : [],
+    [listing],
+  );
 
   function handleReserve() {
     if (!listing || nights <= 0) return;
@@ -122,13 +98,15 @@ export default function PropertyPage() {
 
   if (loading) {
     return (
-      <div className="mx-auto max-w-5xl p-8 text-sm text-zinc-500">Loading property…</div>
+      <div className="mx-auto max-w-6xl px-6 py-16 text-sm text-muted-foreground">
+        Loading property…
+      </div>
     );
   }
 
   if (error || !listing) {
     return (
-      <div className="mx-auto max-w-5xl p-8">
+      <div className="mx-auto max-w-6xl px-6 py-16">
         <p className="text-sm text-red-600">{error ?? "Not found"}</p>
         <Link href="/" className="mt-4 inline-block text-sm text-rose-600 hover:underline">
           ← Back to search
@@ -137,106 +115,161 @@ export default function PropertyPage() {
     );
   }
 
-  const aspectEntries = [
-    ["Cleanliness", listing.aspects.cleanliness],
-    ["Location", listing.aspects.location],
-    ["Value", listing.aspects.value],
-    ["Communication", listing.aspects.communication],
-    ["Check-in", listing.aspects.checkin],
-  ] as const;
-
   return (
-    <div className="min-h-screen bg-zinc-50">
-      <header className="border-b border-zinc-200 bg-white px-4 py-3">
-        <div className="mx-auto flex max-w-5xl items-center justify-between">
-          <Link href="/" className="text-sm font-medium text-rose-600 hover:underline">
+    <div className="min-h-screen bg-white">
+      <header className="sticky top-0 z-40 border-b border-zinc-200/80 bg-white/95 backdrop-blur">
+        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
+          <Link
+            href="/"
+            className="inline-flex items-center gap-1 text-sm font-medium text-zinc-700 hover:text-zinc-900"
+          >
             ← Back to search
           </Link>
-          <span className="text-xs uppercase tracking-wide text-zinc-400">Travel AI</span>
+          <span className="text-xs font-medium uppercase tracking-widest text-zinc-400">
+            Travel AI
+          </span>
         </div>
       </header>
 
-      <main className="mx-auto max-w-5xl px-4 py-6">
-        <div className="overflow-hidden rounded-xl bg-zinc-200">
+      <main className="mx-auto max-w-6xl px-6 pb-16 pt-6">
+        {/* Title row — Airbnb puts title above gallery */}
+        <div className="mb-5 flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h1 className="text-[26px] font-semibold leading-tight tracking-tight text-zinc-900 md:text-[32px]">
+              {listing.name ?? "Unnamed stay"}
+            </h1>
+            <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
+              {listing.review_scores_rating != null && (
+                <span className="flex items-center gap-1 font-medium text-zinc-900">
+                  ★ {listing.review_scores_rating.toFixed(2)}
+                </span>
+              )}
+              {listing.number_of_reviews > 0 && (
+                <>
+                  <span className="text-zinc-300">·</span>
+                  <span className="underline decoration-zinc-300 underline-offset-2">
+                    {listing.number_of_reviews} reviews
+                  </span>
+                </>
+              )}
+              <span className="text-zinc-300">·</span>
+              <span className="text-zinc-600 capitalize">
+                {[listing.neighborhood, listing.city].filter(Boolean).join(", ")}
+              </span>
+            </div>
+          </div>
+          <div className="text-right text-sm text-zinc-600">
+            {listing.host_name && <p>Hosted by {listing.host_name}</p>}
+            {listing.room_type && <p className="text-zinc-500">{listing.room_type}</p>}
+          </div>
+        </div>
+
+        {/* Hero gallery */}
+        <div className="overflow-hidden rounded-xl bg-zinc-100">
           {listing.picture_url ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={listing.picture_url}
               alt={listing.name ?? "Property"}
-              className="h-72 w-full object-cover md:h-96"
+              className="aspect-[16/9] w-full object-cover md:aspect-[21/9] md:max-h-[480px]"
             />
           ) : (
-            <div className="flex h-72 items-center justify-center text-zinc-400">No photo</div>
+            <div className="flex aspect-[16/9] items-center justify-center text-zinc-400">
+              No photo available
+            </div>
           )}
         </div>
 
-        <div className="mt-6 grid gap-8 lg:grid-cols-3">
-          <div className="lg:col-span-2 space-y-8">
-            <section>
-              <h1 className="text-2xl font-semibold text-zinc-900">
-                {listing.name ?? "Unnamed stay"}
-              </h1>
-              <p className="mt-1 text-sm text-zinc-500">
-                {[listing.neighborhood, listing.city, listing.room_type]
-                  .filter(Boolean)
-                  .join(" · ")}
-              </p>
-              <div className="mt-3 flex flex-wrap gap-3 text-sm text-zinc-600">
-                {listing.review_scores_rating != null && (
-                  <span className="rounded bg-zinc-100 px-2 py-0.5">
-                    ★ {listing.review_scores_rating.toFixed(1)} · {listing.number_of_reviews}{" "}
-                    reviews
-                  </span>
-                )}
-                {listing.accommodates != null && <span>{listing.accommodates} guests</span>}
-                {listing.bedrooms != null && <span>{listing.bedrooms} bedrooms</span>}
-                {listing.beds != null && <span>{listing.beds} beds</span>}
-                {listing.bathrooms != null && <span>{listing.bathrooms} baths</span>}
-              </div>
-              {listing.host_name && (
-                <p className="mt-2 text-sm text-zinc-500">Hosted by {listing.host_name}</p>
+        <div className="mt-10 grid gap-12 lg:grid-cols-[minmax(0,1fr)_380px] lg:gap-16">
+          <div className="min-w-0 space-y-10">
+            {/* Quick facts */}
+            <section className="flex flex-wrap gap-3 border-b border-zinc-200 pb-8">
+              {listing.accommodates != null && (
+                <span className="rounded-lg border border-zinc-200 px-3 py-1.5 text-sm text-zinc-700">
+                  {listing.accommodates} guests
+                </span>
+              )}
+              {listing.bedrooms != null && (
+                <span className="rounded-lg border border-zinc-200 px-3 py-1.5 text-sm text-zinc-700">
+                  {listing.bedrooms} bedrooms
+                </span>
+              )}
+              {listing.beds != null && (
+                <span className="rounded-lg border border-zinc-200 px-3 py-1.5 text-sm text-zinc-700">
+                  {listing.beds} beds
+                </span>
+              )}
+              {listing.bathrooms != null && (
+                <span className="rounded-lg border border-zinc-200 px-3 py-1.5 text-sm text-zinc-700">
+                  {listing.bathrooms} baths
+                </span>
+              )}
+              {listing.property_type && (
+                <span className="rounded-lg border border-zinc-200 px-3 py-1.5 text-sm text-zinc-700">
+                  {listing.property_type}
+                </span>
               )}
             </section>
 
             {listing.description && (
               <section>
-                <h2 className="text-lg font-medium text-zinc-900">About this place</h2>
-                <p className="mt-2 whitespace-pre-line text-sm leading-relaxed text-zinc-600">
+                <h2 className="text-[22px] font-semibold text-zinc-900">About this place</h2>
+                <p className="mt-4 whitespace-pre-line text-base leading-relaxed text-zinc-700">
                   {listing.description}
                 </p>
               </section>
             )}
 
+            <hr className="border-zinc-200" />
+
+            {/* Ratings — assignment: aspect scores */}
             <section>
-              <h2 className="text-lg font-medium text-zinc-900">Guest ratings</h2>
-              <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
-                {aspectEntries.map(([label, score]) =>
-                  score != null ? (
-                    <div key={label} className="rounded-lg border border-zinc-200 bg-white p-3">
-                      <p className="text-xs text-zinc-500">{label}</p>
-                      <p className="text-lg font-semibold text-zinc-900">{score.toFixed(1)}</p>
-                    </div>
-                  ) : null,
-                )}
-              </div>
+              <h2 className="mb-6 text-[22px] font-semibold text-zinc-900">Reviews & ratings</h2>
+              <RatingBreakdown
+                overall={listing.review_scores_rating}
+                reviewCount={listing.number_of_reviews}
+                aspects={aspectEntries}
+              />
             </section>
 
+            {/* AI summary — assignment requirement */}
+            {listing.ai_summary && (
+              <section className="rounded-xl border border-zinc-200 bg-zinc-50 p-6">
+                <h3 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">
+                  AI review summary
+                </h3>
+                <p className="mt-3 text-base leading-relaxed text-zinc-800">{listing.ai_summary}</p>
+                <p className="mt-3 text-xs text-zinc-400">
+                  Synthesized from guest reviews — citations available in concierge chat
+                </p>
+              </section>
+            )}
+
+            <PropertyReviews reviews={listing.reviews} highlightReviewId={highlightReviewId} />
+
             {listing.amenities.length > 0 && (
-              <section>
-                <h2 className="text-lg font-medium text-zinc-900">Amenities</h2>
-                <ul className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+              <section className="border-t border-zinc-200 pt-10">
+                <h2 className="text-[22px] font-semibold text-zinc-900">What this place offers</h2>
+                <ul className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
                   {listing.amenities.map((a) => (
-                    <li key={a} className="rounded-md bg-white px-3 py-2 text-sm text-zinc-700">
-                      {a.replace(/_/g, " ")}
+                    <li
+                      key={a}
+                      className="flex items-center gap-3 text-[15px] text-zinc-700"
+                    >
+                      <span className="text-emerald-600">✓</span>
+                      <span className="capitalize">{a.replace(/_/g, " ")}</span>
                     </li>
                   ))}
                 </ul>
               </section>
             )}
 
-            <section>
-              <h2 className="text-lg font-medium text-zinc-900">Location</h2>
-              <div className="mt-3 overflow-hidden rounded-lg border border-zinc-200">
+            <section className="border-t border-zinc-200 pt-10">
+              <h2 className="text-[22px] font-semibold text-zinc-900">Where you&apos;ll be</h2>
+              <p className="mt-1 text-sm text-zinc-500 capitalize">
+                {[listing.neighborhood, listing.city].filter(Boolean).join(" · ")}
+              </p>
+              <div className="mt-4 overflow-hidden rounded-xl border border-zinc-200">
                 <PropertyMap
                   latitude={listing.latitude}
                   longitude={listing.longitude}
@@ -244,161 +277,26 @@ export default function PropertyPage() {
                 />
               </div>
             </section>
-
-            <section>
-              <h2 className="text-lg font-medium text-zinc-900">AI review summary</h2>
-              <p className="mt-2 rounded-lg border border-rose-100 bg-rose-50 p-4 text-sm text-zinc-700">
-                {listing.ai_summary}
-              </p>
-            </section>
-
-            <section>
-              <div className="flex flex-wrap items-end justify-between gap-3">
-                <h2 className="text-lg font-medium text-zinc-900">Guest reviews</h2>
-                <div className="flex flex-wrap gap-2">
-                  <select
-                    value={langFilter}
-                    onChange={(e) => setLangFilter(e.target.value)}
-                    className="rounded-md border border-zinc-300 px-2 py-1 text-xs"
-                  >
-                    <option value="">All languages</option>
-                    {languages.map((l) => (
-                      <option key={l} value={l}>
-                        {l}
-                      </option>
-                    ))}
-                  </select>
-                  <select
-                    value={topicFilter}
-                    onChange={(e) => setTopicFilter(e.target.value)}
-                    className="rounded-md border border-zinc-300 px-2 py-1 text-xs"
-                  >
-                    <option value="">All topics</option>
-                    {topics.map((t) => (
-                      <option key={t} value={t}>
-                        {t}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-              <div className="mt-4 space-y-3">
-                {filteredReviews.length === 0 ? (
-                  <p className="text-sm text-zinc-500">No reviews match filters.</p>
-                ) : (
-                  filteredReviews.map((r) => (
-                    <div
-                      key={r.id}
-                      id={`review-${r.id}`}
-                      ref={(el) => {
-                        reviewRefs.current[r.id] = el;
-                      }}
-                      className="scroll-mt-24 rounded-lg border border-zinc-200 bg-white p-4 transition-shadow"
-                    >
-                      <div className="flex items-center justify-between gap-2 text-xs text-zinc-500">
-                        <span className="font-medium text-zinc-800">
-                          {r.reviewer_name ?? "Guest"}
-                        </span>
-                        {r.date && <span>{formatDate(r.date)}</span>}
-                      </div>
-                      {r.topics.length > 0 && (
-                        <div className="mt-1 flex flex-wrap gap-1">
-                          {r.topics.map((t) => (
-                            <span
-                              key={t}
-                              className="rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] uppercase text-zinc-500"
-                            >
-                              {t}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                      <p className="mt-2 text-sm leading-relaxed text-zinc-700">{r.comments}</p>
-                    </div>
-                  ))
-                )}
-              </div>
-            </section>
           </div>
 
-          <aside className="space-y-4 lg:sticky lg:top-6 lg:self-start">
-            <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
-              <p className="text-xl font-semibold text-zinc-900">
-                {formatPrice(listing.price)}
-                <span className="text-sm font-normal text-zinc-500"> / night</span>
+          <aside className="lg:sticky lg:top-24 lg:self-start">
+            <BookingCard
+              price={listing.price}
+              checkIn={checkIn}
+              checkOut={checkOut}
+              nights={nights}
+              subtotal={subtotal}
+              tax={tax}
+              total={total}
+              onCheckInChange={setCheckIn}
+              onCheckOutChange={setCheckOut}
+              onReserve={handleReserve}
+              calendarPreview={listing.calendar}
+            />
+            {nights > 0 && (
+              <p className="mt-3 text-center text-sm text-zinc-500">
+                {formatPrice(listing.price)} × {nights} nights before taxes
               </p>
-
-              <div className="mt-4 grid grid-cols-2 gap-2">
-                <label className="text-xs text-zinc-500">
-                  Check-in
-                  <input
-                    type="date"
-                    value={checkIn}
-                    onChange={(e) => setCheckIn(e.target.value)}
-                    className="mt-1 w-full rounded-md border border-zinc-300 px-2 py-1.5 text-sm"
-                  />
-                </label>
-                <label className="text-xs text-zinc-500">
-                  Check-out
-                  <input
-                    type="date"
-                    value={checkOut}
-                    onChange={(e) => setCheckOut(e.target.value)}
-                    className="mt-1 w-full rounded-md border border-zinc-300 px-2 py-1.5 text-sm"
-                  />
-                </label>
-              </div>
-
-              {nights > 0 && (
-                <div className="mt-4 space-y-1 border-t border-zinc-100 pt-3 text-sm text-zinc-600">
-                  <div className="flex justify-between">
-                    <span>
-                      {formatPrice(listing.price)} × {nights} nights
-                    </span>
-                    <span>{formatPrice(subtotal)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Taxes (mock 12%)</span>
-                    <span>{formatPrice(tax)}</span>
-                  </div>
-                  <div className="flex justify-between font-semibold text-zinc-900">
-                    <span>Total</span>
-                    <span>{formatPrice(total)}</span>
-                  </div>
-                </div>
-              )}
-
-              <button
-                type="button"
-                disabled={nights <= 0}
-                onClick={handleReserve}
-                className="mt-4 w-full rounded-lg bg-rose-600 py-2.5 text-sm font-medium text-white disabled:opacity-40"
-              >
-                Reserve
-              </button>
-              <p className="mt-2 text-center text-[10px] text-zinc-400">
-                Mock booking — no payment collected
-              </p>
-            </div>
-
-            {listing.calendar.length > 0 && (
-              <div className="rounded-xl border border-zinc-200 bg-white p-4">
-                <h3 className="text-sm font-medium text-zinc-900">Availability (next 90 days)</h3>
-                <div className="mt-2 flex flex-wrap gap-1">
-                  {listing.calendar.slice(0, 42).map((d) => (
-                    <span
-                      key={d.date}
-                      title={d.date}
-                      className={`h-2.5 w-2.5 rounded-sm ${
-                        d.available ? "bg-emerald-400" : "bg-zinc-200"
-                      }`}
-                    />
-                  ))}
-                </div>
-                <p className="mt-2 text-[10px] text-zinc-400">
-                  Green = available · gray = booked
-                </p>
-              </div>
             )}
           </aside>
         </div>
