@@ -30,7 +30,8 @@ SUMMARY_TTL = 86400
 
 COMPARE_SYSTEM = """You compare short-term rental listings for a traveler.
 Be concise (4-6 sentences). Cover price/value, guest ratings, amenities, and a clear recommendation.
-Name the best overall pick and note trade-offs."""
+Name the best overall pick using the listing title exactly as given — never use numeric listing IDs.
+Note trade-offs between the named stays."""
 
 SUMMARY_SYSTEM = """Summarize guest review themes for one listing in 2-3 sentences.
 Mention strengths and any recurring complaints. Be factual and concise."""
@@ -48,7 +49,7 @@ def _fetch_cards(db: Session, listing_ids: list[int]) -> list[ListingCard]:
     return ordered
 
 
-def _review_snippets(db: Session, listing_ids: list[int], limit_per: int = 2) -> str:
+def _review_snippets(db: Session, listing_ids: list[int], names: dict[int, str], limit_per: int = 2) -> str:
     rows = db.execute(
         text(
             """
@@ -66,15 +67,31 @@ def _review_snippets(db: Session, listing_ids: list[int], limit_per: int = 2) ->
         if counts.get(lid, 0) >= limit_per:
             continue
         counts[lid] = counts.get(lid, 0) + 1
-        lines.append(f"[listing {lid}] {(r.comments or '')[:200]}")
+        label = names.get(lid) or "Stay"
+        lines.append(f'[{label}] {(r.comments or "")[:200]}')
     return "\n".join(lines)
+
+
+def _verdict_use_names(verdict: str, cards: list[ListingCard]) -> str:
+    """Replace any echoed numeric IDs with listing titles."""
+    pairs = [(int(c.id), c.name or f"Stay in {c.city}") for c in cards]
+    return _verdict_use_names_by_id(verdict, pairs)
+
+
+def _verdict_use_names_by_id(verdict: str, id_names: list[tuple[int, str]]) -> str:
+    out = verdict
+    for lid, name in id_names:
+        out = out.replace(f"ID {lid}", name)
+        out = out.replace(f"id {lid}", name)
+        out = out.replace(str(lid), name)
+    return out
 
 
 async def _build_verdict(cards: list[ListingCard], review_text: str) -> str:
     listing_lines = [
-        f"- ID {c.id} | {c.name or 'Stay'} | {c.city} | €{c.price}/night | "
-        f"rating {c.review_scores_rating} ({c.number_of_reviews} reviews) | "
-        f"amenities: {', '.join(c.amenities[:8])}"
+        f"- **{c.name or 'Unnamed stay'}** · {c.city} · €{c.price}/night · "
+        f"rating {c.review_scores_rating} ({c.number_of_reviews} reviews) · "
+        f"amenities: {', '.join(c.amenities[:8]) or 'none listed'}"
         for c in cards
     ]
     prompt = [
@@ -90,7 +107,7 @@ async def _build_verdict(cards: list[ListingCard], review_text: str) -> str:
     try:
         result = await llm.ainvoke(prompt)
         content = result.content if isinstance(result.content, str) else str(result.content)
-        return content.strip()
+        return _verdict_use_names(content.strip(), cards)
     except Exception:
         best = max(cards, key=lambda c: (c.review_scores_rating or 0, c.number_of_reviews))
         return (
@@ -177,15 +194,21 @@ async def compare_listings(
         trace.finish_step("batch_compare", results_count=len(cached.get("listings", [])))
         trace.finalize(int((time.time() - start) * 1000))
         trace_store.save(request_id, trace)
+        items = [CompareListingItem(**item) for item in cached["listings"]]
+        verdict = _verdict_use_names_by_id(
+            cached["verdict"],
+            [(int(i.id), i.name or "Stay") for i in items],
+        )
         return CompareResponse(
             request_id=request_id,
-            listings=[CompareListingItem(**item) for item in cached["listings"]],
-            verdict=cached["verdict"],
+            listings=items,
+            verdict=verdict,
             cached=True,
         )
 
     cards = _fetch_cards(db, id_list)
-    review_text = _review_snippets(db, id_list)
+    name_by_id = {int(c.id): c.name or f"Stay in {c.city}" for c in cards}
+    review_text = _review_snippets(db, id_list, name_by_id)
     verdict = await _build_verdict(cards, review_text)
 
     items = [

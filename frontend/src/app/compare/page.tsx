@@ -14,6 +14,48 @@ function formatPrice(price: number) {
   }).format(price);
 }
 
+function VerdictWithLinks({
+  verdict,
+  listings,
+}: {
+  verdict: string;
+  listings: CompareResponse["listings"];
+}) {
+  const named = listings
+    .filter((l) => l.name)
+    .sort((a, b) => (b.name?.length ?? 0) - (a.name?.length ?? 0));
+
+  if (named.length === 0) {
+    return <>{verdict}</>;
+  }
+
+  const pattern = new RegExp(
+    `(${named.map((l) => l.name!.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})`,
+    "g",
+  );
+  const parts = verdict.split(pattern);
+
+  return (
+    <>
+      {parts.map((part, i) => {
+        const match = named.find((l) => l.name === part);
+        if (match) {
+          return (
+            <Link
+              key={`${match.id}-${i}`}
+              href={`/property/${match.id}`}
+              className="font-medium text-rose-700 hover:underline"
+            >
+              {part}
+            </Link>
+          );
+        }
+        return <span key={i}>{part}</span>;
+      })}
+    </>
+  );
+}
+
 function CompareContent() {
   const params = useSearchParams();
   const idsParam = params.get("ids") ?? "";
@@ -25,7 +67,7 @@ function CompareContent() {
 
   useEffect(() => {
     if (ids.length < 2) {
-      setError("Select 2–4 listings to compare.");
+      setError("Select 2–5 listings to compare.");
       setLoading(false);
       return;
     }
@@ -127,7 +169,10 @@ function CompareContent() {
             <div className="rounded-xl border border-rose-100 bg-rose-50/50 p-5">
               <h2 className="font-semibold text-zinc-900">AI verdict</h2>
               <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-zinc-700">
-                {data.verdict}
+                <VerdictWithLinks verdict={data.verdict} listings={data.listings} />
+              </p>
+              <p className="mt-3 text-xs text-zinc-500">
+                Stays above link to property pages for full reviews and booking.
               </p>
             </div>
           </div>
