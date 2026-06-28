@@ -9,6 +9,16 @@ class Settings(BaseSettings):
     database_url: str = "postgresql://postgres:postgrespassword@localhost:5432/travel_db"
     cors_origins: str = "http://localhost:3000"
     api_prefix: str = "/api"
+    vector_dimension: int = 512
+
+    openai_api_key: str = ""
+    embedding_model: str = "text-embedding-3-small"
+
+    llm_provider: str = "ollama"
+    llm_base_url: str = "http://localhost:11434/v1"
+    llm_model_intent: str = "qwen2.5:3b"
+    llm_model_review: str = "qwen2.5:3b"
+    llm_model_itinerary: str = "llama3.1:8b"
 
     model_config = SettingsConfigDict(env_file=ROOT / ".env", extra="ignore")
 
@@ -22,6 +32,13 @@ class Settings(BaseSettings):
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+
+    def llm_model_for(self, role: str) -> str:
+        return {
+            "intent": self.llm_model_intent,
+            "review": self.llm_model_review,
+            "itinerary": self.llm_model_itinerary,
+        }.get(role, self.llm_model_intent)
 
 
 settings = Settings()

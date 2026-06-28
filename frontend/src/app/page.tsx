@@ -5,6 +5,8 @@ import { useCallback, useEffect, useState } from "react";
 import FilterBar from "@/components/FilterBar";
 import ListingList from "@/components/ListingList";
 import MapView from "@/components/MapView";
+import NaturalLanguageBar from "@/components/NaturalLanguageBar";
+import ChatConsole from "@/components/ChatConsole";
 import {
   fetchListings,
   ListingCard,
@@ -64,6 +66,10 @@ export default function SearchPage() {
         <p className="text-sm text-zinc-500">Filter stays and explore on the map</p>
       </header>
 
+      <NaturalLanguageBar
+        onFiltersParsed={(parsed) => setFilters((prev) => ({ ...prev, ...parsed, offset: 0 }))}
+      />
+
       <FilterBar
         filters={filters}
         useMapBounds={useMapBounds}
@@ -99,6 +105,8 @@ export default function SearchPage() {
           />
         </div>
       </div>
+
+      <ChatConsole />
     </div>
   );
 }

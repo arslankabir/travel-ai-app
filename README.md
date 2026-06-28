@@ -68,6 +68,36 @@ Open http://localhost:3000 — split-screen listing search with MapLibre map.
 
 **API:** `GET /api/listings` — filters (`city`, `min_price`, `max_price`, `min_rating`, `accommodates`, `bedrooms`, `amenity`, `check_in`, `check_out`, `bbox`), sort, pagination.
 
+## Quick start (Phase 3 — AI layer)
+
+Requires Ollama running locally for full concierge, or switch `LLM_PROVIDER=openai` in `.env`.
+
+```bash
+# Ollama (Option A — one-time model pull)
+ollama pull qwen2.5:3b
+ollama pull llama3.1:8b
+curl http://localhost:11434/api/tags   # verify both models listed
+
+# Restart backend after pip install (adds langgraph)
+cd backend && source .venv/bin/activate
+pip install -r requirements.txt
+uvicorn app.main:app --reload --port 8000
+
+cd frontend && npm run dev
+```
+
+**Note:** `OPENAI_API_KEY` in root `.env` is still required — retrieval uses OpenAI embeddings even when chat runs on Ollama.
+
+**Features:**
+- **Natural language search bar** — parses query → filter chips → refreshes listings (`POST /api/chat/stream` mode=`search`)
+- **AI Concierge** (floating panel) — LangGraph agents: Intent → Retrieval → Review → Itinerary (`mode=concierge`)
+- **Hybrid SSE** — `filters_parsed`, `citations_loaded`, `token`, `node_start`, `complete`, `error`
+- **Trace** — `GET /api/trace/{request_id}` (token usage, agent steps, latency)
+
+**Why LangGraph:** conditional routing by intent type, observable node steps for SSE, and clean state passing between specialized agents.
+
+NL search falls back to heuristic parsing if Ollama is offline; concierge review/itinerary need a running LLM.
+
 ## Local stack
 
 | Service | URL |

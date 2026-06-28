@@ -2,9 +2,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.routers import listings
+from app.routers import chat, listings, trace
 
-app = FastAPI(title="Travel AI API", version="0.1.0")
+app = FastAPI(title="Travel AI API", version="0.2.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -15,6 +15,8 @@ app.add_middleware(
 )
 
 app.include_router(listings.router, prefix=settings.api_prefix)
+app.include_router(chat.router, prefix=settings.api_prefix)
+app.include_router(trace.router, prefix=settings.api_prefix)
 
 
 @app.get("/health")

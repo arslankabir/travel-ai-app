@@ -3,7 +3,7 @@
 Living status doc for the Travel AI assignment. Update whenever major milestones complete or blockers resolve.
 
 **Last updated:** 2026-06-28  
-**Current phase:** Phase 2 in progress — FastAPI search API + Next.js split-screen map  
+**Current phase:** Phase 3 in progress — LangGraph agents + hybrid SSE chat  
 **Related docs:** [PROJECT_PLAN.md](./PROJECT_PLAN.md) · [HL-component-diagram.md](./HL-component-diagram.md) · [Full Stack AI Developer Assignment.md](./Full%20Stack%20AI%20Developer%20Assignment.md)
 
 ## How to update this file
@@ -58,8 +58,8 @@ print(f\"{'TOTAL':<12} {sum(x[1] for x in rows):>12,} {sum(x[2] for x in rows):>
 | Phase | Hours (plan) | Status | Notes |
 | :--- | :--- | :--- | :--- |
 | **1** Database & Ingestion | 0–8 | ✅ Done | 5 cities in DB; all minimums met |
-| **2** Core Search & Map | 8–18 | 🟡 In progress | FastAPI `/api/listings` + Next.js list/map UI |
-| **3** AI Layer | 18–32 | ⬜ Not started | LangGraph, hybrid SSE, trace |
+| **2** Core Search & Map | 8–18 | ✅ Done | FastAPI listings + Next.js map UI |
+| **3** AI Layer | 18–32 | 🟡 In progress | LangGraph, SSE chat, trace, NL search + concierge |
 | **4** Detail, Compare, Polish | 32–40 | ⬜ Not started | |
 | **5** Deploy, Eval, Loom | 40–48 | ⬜ Not started | |
 
@@ -109,14 +109,22 @@ print(f\"{'TOTAL':<12} {sum(x[1] for x in rows):>12,} {sum(x[2] for x in rows):>
 
 ## In progress / next up
 
-### Phase 2 — Core Search & Map (current)
-- [x] Scaffold FastAPI backend (`backend/app/`)
-- [x] `GET /api/listings` — city, price, rating, guests, bedrooms, amenity, check-in/out availability, bbox, sort, pagination
-- [x] `GET /api/listings/{id}` — single listing card
-- [x] Next.js split-screen: `FilterBar`, `ListingList`, `MapView` (MapLibre + clustering)
-- [x] List ↔ map hover sync; optional map-bounds filter
-- [ ] Guest selector polish (children soft label)
-- [ ] Map/list UX polish (Booking-style density — Phase 4 overlap)
+### Phase 3 — AI Layer (current)
+- [x] `ModelFactory` — pluggable Ollama/OpenAI chat LLMs; fixed OpenAI embeddings
+- [x] LangGraph: Intent → Retrieval → Review → Itinerary with conditional routing
+- [x] Hybrid retrieval: SQL filters + pgvector semantic search
+- [x] Review agent with citation validation against DB reviews
+- [x] `POST /api/chat/stream` (SSE) + `GET /api/trace/{request_id}`
+- [x] Frontend: `NaturalLanguageBar`, `ChatConsole`, `lib/sse.ts`
+- [x] Heuristic intent fallback when Ollama offline (NL search still works)
+- [x] **Ollama Option A verified** (2026-06-28) — models pulled; intent agent + SSE working; see [log](#2026-06-28--ollama-setup--phase-3-smoke)
+- [x] `ModelFactory` reads LLM + embedding keys from pydantic `Settings` (fixes `OPENAI_API_KEY` not visible to retrieval)
+- [ ] Batch compare endpoint (`/api/batch/compare`) — Phase 4 overlap
+- [ ] Redis caching for search/summaries — Phase 4 overlap
+
+### Phase 4 — next
+- [ ] Property detail page, compare matrix, wishlist
+- [ ] UI polish (Booking-style density)
 
 ### Phase 1 — remaining (optional)
 - [ ] Document ingest slice strategy in README (raw vs validated, review caps, madrid `--limit 10100`)
@@ -124,19 +132,64 @@ print(f\"{'TOTAL':<12} {sum(x[1] for x in rows):>12,} {sum(x[2] for x in rows):>
 - [ ] Implement `enrich_reviews.py` (precomputed summaries for deploy slice)
 - [ ] Implement `export_deploy.py` (Supabase slice)
 
-### Phase 2 — run locally
+### Phase 3 — run locally
 ```bash
 docker compose up -d
-cd backend && source .venv/bin/activate && uvicorn app.main:app --reload --port 8000
-cd frontend && cp .env.local.example .env.local && npm run dev
+ollama pull qwen2.5:3b && ollama pull llama3.1:8b
+# OPENAI_API_KEY in root .env still required for retrieval embeddings
+cd backend && source .venv/bin/activate && pip install -r requirements.txt
+uvicorn app.main:app --reload --port 8000
+cd frontend && npm run dev
 ```
 
 **Smoke test (2026-06-28):**
 ```bash
-curl -s "http://127.0.0.1:8000/health"
-curl -s "http://127.0.0.1:8000/api/listings?city=lisbon&limit=2"
-# → total: 21466, items with lat/lon/amenities
+curl -s -N -X POST http://127.0.0.1:8000/api/chat/stream \
+  -H 'Content-Type: application/json' \
+  -d '{"user_input":"quiet 1-bed in Lisbon under 130","mode":"search"}'
+# → filters_parsed with city=lisbon, max_price=130, bedrooms=1
 npm run build  # frontend — pass
+```
+
+---
+
+### 2026-06-28 — Ollama setup + Phase 3 smoke
+
+**Why:** Enable Option A local chat LLMs (Intent/Review/Itinerary) per `PROJECT_PLAN.md` Phase 3 step 0.
+
+**Commands:**
+```bash
+ollama pull qwen2.5:3b
+ollama pull llama3.1:8b
+curl http://localhost:11434/api/tags
+ollama list
+curl -s http://localhost:11434/v1/models
+curl -s -N -X POST http://localhost:8000/api/chat/stream \
+  -H 'Content-Type: application/json' \
+  -d '{"user_input":"compare reviews for quiet stays in Lisbon","mode":"concierge"}'
+```
+
+**Result:** Both models installed (`qwen2.5:3b` 1.9 GB, `llama3.1:8b` 4.9 GB). Ollama API ✅. Concierge SSE: `trace_init` → `intent_agent` → `filters_parsed` (city=lisbon) → `retrieval_agent` started.
+
+**Issue found:** retrieval failed with `Missing credentials… OPENAI_API_KEY` — `ModelFactory` used `os.getenv` but `.env` loads via pydantic `Settings` only. **Fixed:** `config.py` + `factory.py` now read keys from `settings`.
+
+**Terminal log (as run):**
+```
+arsalankabeer@Arsalans-MacBook-Pro travel-ai-app % ollama pull qwen2.5:3b
+ollama pull llama3.1:8b
+...
+success 
+success 
+arsalankabeer@Arsalans-MacBook-Pro travel-ai-app % curl http://localhost:11434/api/tags
+ollama list
+{"models":[{"name":"llama3.1:8b",...},{"name":"qwen2.5:3b",...}]}
+NAME           ID              SIZE      MODIFIED           
+llama3.1:8b    46e0c10c039e    4.9 GB    6 seconds ago         
+qwen2.5:3b     357c53fb659c    1.9 GB    About a minute ago    
+...
+data: {"event": "filters_parsed", "filters": {"city": "lisbon", ...}}
+data: {"event": "node_start", "node": "retrieval_agent"}
+data: {"event": "error", "node": "graph", "message": "Missing credentials... OPENAI_API_KEY...", "recoverable": false}
 ```
 
 ---
@@ -549,6 +602,15 @@ python scripts/ingest.py --city barcelona --limit 10 --skip-embeddings
 ---
 
 ## Changelog
+
+### 2026-06-28 (Ollama setup + Settings fix)
+- Ollama models pulled; Phase 3 smoke logged; `ModelFactory` uses pydantic Settings for API keys
+- `PROJECT_PLAN.md` Phase 3 step 0: local Ollama setup; README ollama pull commands
+
+### 2026-06-28 (Phase 3 AI layer)
+- LangGraph agents (Intent, Retrieval, Review, Itinerary) + `ModelFactory`
+- Hybrid SSE `/api/chat/stream`, trace endpoint, NL search bar + concierge panel
+- Heuristic intent fallback for offline Ollama
 
 ### 2026-06-28 (Phase 2 scaffold)
 - FastAPI backend: `/health`, `/api/listings`, `/api/listings/{id}` against live 50K DB

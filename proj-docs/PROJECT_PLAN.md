@@ -71,6 +71,30 @@ LLM_MODEL_ITINERARY=llama3.1:8b    # Itinerary generation (dev only)
 - Never switch embedding providers between ingest and query — vectors must share the same mathematical space.
 - Run EVAL golden queries and record Loom demo against **OpenAI production config** (graders hit deployed app).
 - Ollama does not return reliable token usage → telemetry/token counts are authoritative only under `LLM_PROVIDER=openai`.
+- **Chat LLMs (Ollama) ≠ embeddings (OpenAI):** retrieval semantic search always calls OpenAI embeddings; `OPENAI_API_KEY` must be set even when `LLM_PROVIDER=ollama`.
+
+### Local Ollama setup (Option A — chat agents only)
+
+Ollama runs **natively on the Mac** (M4 GPU), not inside Docker.
+
+```bash
+# 1. Install from https://ollama.com (app starts server on :11434)
+
+# 2. Pull models referenced in .env (one-time)
+ollama pull qwen2.5:3b      # Intent + Review agents (~1.9 GB)
+ollama pull llama3.1:8b     # Itinerary agent (~4.9 GB)
+
+# 3. Verify
+curl http://localhost:11434/api/tags
+ollama list
+
+# 4. Confirm .env Option A is active
+# LLM_PROVIDER=ollama
+# LLM_BASE_URL=http://localhost:11434/v1
+# OPENAI_API_KEY=...   ← still required for pgvector retrieval
+```
+
+**Without Ollama:** NL search bar uses heuristic intent parsing; Concierge review/itinerary agents fail unless you switch to Option B (`LLM_PROVIDER=openai`).
 
 ---
 
@@ -571,6 +595,7 @@ Use Redis if in docker-compose; fallback to `functools.lru_cache` for local dev 
 
 ### Phase 3: AI Layer (Hours 18–32)
 
+0. **Local Ollama setup (Option A)** — install Ollama natively; `ollama pull qwen2.5:3b` + `ollama pull llama3.1:8b`; verify `curl http://localhost:11434/api/tags`. Keep `OPENAI_API_KEY` set (embeddings/retrieval still use OpenAI).
 1. LangGraph nodes + router with conditional edges (all nodes use `ModelFactory`)
 2. Hybrid SSE `/api/chat/stream` — `astream_events` + structured metadata + `TraceStore`
 3. Natural language search bar + global concierge panel (both pass `mode`)
