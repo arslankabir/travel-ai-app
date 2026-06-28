@@ -661,6 +661,10 @@ python scripts/ingest.py --city barcelona --limit 10 --skip-embeddings
 
 ## Changelog
 
+### 2026-06-28 (ModelFactory — OpenAI-compatible chat APIs)
+- Chat: `LLM_BASE_URL` + `LLM_API_KEY` (DeepSeek, OpenAI, Groq, etc.) via `ChatOpenAI`
+- Embeddings: still `OPENAI_API_KEY` only (`get_embeddings()` unchanged)
+
 ### 2026-06-28 (Railway live — Session pooler fix)
 - API URL: https://travel-ai-app-production-bc05.up.railway.app — `/health` → `{"status":"ok","db":true}`
 - Fix chain: PORT/socat 502 → localhost DATABASE_URL → IPv6 direct host → **Session pooler** URI (IPv4)

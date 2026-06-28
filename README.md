@@ -111,7 +111,7 @@ API docs: http://localhost:8000/docs
 
 1. **Local full corpus / deploy DB slice** — free-tier limits; pipeline proven locally.
 2. **Embeddings fixed to OpenAI 512-dim** — stable vector space across environments.
-3. **Chat LLMs pluggable** — Ollama locally, OpenAI in production.
+3. **Chat LLMs pluggable** — Ollama locally; any OpenAI-compatible API in prod (`LLM_BASE_URL` + `LLM_API_KEY`). Embeddings always OpenAI.
 4. **Listing embeddings only** — review agent uses SQL, not full review vectors.
 5. **90-day calendar** — keeps calendar table bounded.
 6. **No auth** — wishlist in `localStorage`.

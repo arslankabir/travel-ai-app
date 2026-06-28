@@ -74,9 +74,10 @@ postgresql://postgres.unrkkzzmeumoogivclpv:PASSWORD@aws-0-ap-northeast-2.pooler.
 | Variable | Value |
 | :--- | :--- |
 | `DATABASE_URL` | Session pooler URI (above) |
-| `OPENAI_API_KEY` | Production key |
+| `OPENAI_API_KEY` | OpenAI key (**embeddings** + optional chat fallback) |
 | `LLM_PROVIDER` | `openai` |
-| `LLM_BASE_URL` | `https://api.openai.com/v1` |
+| `LLM_BASE_URL` | `https://api.openai.com/v1` or `https://api.deepseek.com/v1` |
+| `LLM_API_KEY` | Chat key (DeepSeek etc.; omit to reuse `OPENAI_API_KEY`) |
 | `LLM_MODEL_INTENT` | `gpt-4o-mini` |
 | `LLM_MODEL_REVIEW` | `gpt-4o-mini` |
 | `LLM_MODEL_ITINERARY` | `gpt-4o` |

@@ -34,9 +34,10 @@ Deploy the **API on Railway**, **frontend on Vercel**, and **Postgres on Supabas
    | Variable | Example |
    | :--- | :--- |
    | `DATABASE_URL` | `postgresql://...` |
-   | `OPENAI_API_KEY` | `sk-...` |
+   | `OPENAI_API_KEY` | `sk-...` (embeddings only — required for semantic search) |
    | `LLM_PROVIDER` | `openai` |
-   | `LLM_BASE_URL` | `https://api.openai.com/v1` |
+   | `LLM_BASE_URL` | `https://api.openai.com/v1` or `https://api.deepseek.com/v1` |
+   | `LLM_API_KEY` | Chat API key (DeepSeek/OpenAI/etc.; optional if same as OpenAI) |
    | `LLM_MODEL_INTENT` | `gpt-4o-mini` |
    | `LLM_MODEL_REVIEW` | `gpt-4o-mini` |
    | `LLM_MODEL_ITINERARY` | `gpt-4o` |
