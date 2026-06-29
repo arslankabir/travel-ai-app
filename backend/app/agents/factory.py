@@ -4,9 +4,21 @@ from app.config import settings
 
 DEFAULT_CHAT_BASE_URL = "https://api.openai.com/v1"
 
+# LLM_PROVIDER values:
+#   ollama              — local chat via Ollama (LLM_BASE_URL, e.g. http://localhost:11434/v1)
+#   openai              — OpenAI-compatible HTTP chat API (NOT "OpenAI the company" by default)
+#   openai_compatible   — alias for openai
+#
+# With openai/openai_compatible, set LLM_BASE_URL + LLM_API_KEY for any vendor that exposes
+# /v1/chat/completions, e.g. DeepSeek, Groq, Mistral, Together, or OpenAI itself.
+# Swap vendor by env vars only — no factory code change.
+#
+# Native SDK-only providers (e.g. Anthropic Claude direct API) need a new factory branch.
+# Embeddings are always OpenAI via OPENAI_API_KEY — separate from chat (get_embeddings).
+
 
 class ModelFactory:
-    """Chat LLMs are pluggable (Ollama or any OpenAI-compatible API). Embeddings are OpenAI-only."""
+    """Pluggable chat LLMs (Ollama or OpenAI-compatible APIs). Embeddings are OpenAI-only."""
 
     @staticmethod
     def get_llm(role: str = "intent", temperature: float = 0.0) -> ChatOpenAI:
@@ -21,6 +33,7 @@ class ModelFactory:
                 temperature=temperature,
             )
 
+        # OpenAI-compatible chat API — vendor chosen by LLM_BASE_URL + LLM_API_KEY
         if provider in ("openai", "openai_compatible"):
             api_key = settings.chat_api_key
             if not api_key:
@@ -37,7 +50,8 @@ class ModelFactory:
             )
 
         raise ValueError(
-            f"Unsupported LLM provider: {provider!r}. Use ollama or openai (OpenAI-compatible APIs)."
+            f"Unsupported LLM provider: {provider!r}. "
+            "Use ollama (local) or openai/openai_compatible (LLM_BASE_URL + LLM_API_KEY)."
         )
 
     @staticmethod
